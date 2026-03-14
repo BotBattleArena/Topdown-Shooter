@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"flag"
+
 	"github.com/BotBattleArena/ArenaFramework/pkg/arena"
 )
 
@@ -240,10 +242,20 @@ func main() {
 		log.Fatal(http.ListenAndServe(WebPort, nil))
 	}()
 
-	cfg, err := loadConfig("config.json")
-	if err != nil {
-		log.Printf("Warning: configuration not found or invalid, using defaults: %v", err)
-		cfg = Config{InputDir: "./bots/inputs"}
+	inputDirFlag := flag.String("input-dir", "", "path to bots input directory")
+	flag.Parse()
+
+	var cfg Config
+	var err error
+
+	if *inputDirFlag != "" {
+		cfg.InputDir = *inputDirFlag
+	} else {
+		cfg, err = loadConfig("config.json")
+		if err != nil {
+			log.Printf("Warning: configuration not found or invalid, using defaults: %v", err)
+			cfg = Config{InputDir: "./bots/inputs"}
+		}
 	}
 
 	a, err := arena.New(arena.Config{
