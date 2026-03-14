@@ -5,4 +5,4 @@ build:
 	go build -o bin/topdown-shooter.exe ./cmd/topdownshooter
 
 clean:
-	@if exist bin rmdir /s /q bin
+	@cmd /c if exist bin rmdir /s /q bin
