@@ -305,6 +305,129 @@ func rndSpawn() V2 {
 	return V2{m + rand.Float64()*(MapW-2*m), m + rand.Float64()*(MapH-2*m)}
 }
 
+// --------------- Physics Helpers ---------------
+
+func closestPointOnLineSegment(p, a, b V2) V2 {
+	ab := V2{b.X - a.X, b.Y - a.Y}
+	lensq := ab.X*ab.X + ab.Y*ab.Y
+	if lensq < 0.0001 {
+		return a
+	}
+	t := ((p.X-a.X)*ab.X + (p.Y-a.Y)*ab.Y) / lensq
+	t = clamp(t, 0, 1)
+	return V2{a.X + t*ab.X, a.Y + t*ab.Y}
+}
+
+func isPointInPoly(pt V2, poly [][2]float64) bool {
+	inside := false
+	j := len(poly) - 1
+	for i := 0; i < len(poly); i++ {
+		xi, yi := poly[i][0], poly[i][1]
+		xj, yj := poly[j][0], poly[j][1]
+		intersect := ((yi > pt.Y) != (yj > pt.Y)) && (pt.X < (xj-xi)*(pt.Y-yi)/(yj-yi)+xi)
+		if intersect {
+			inside = !inside
+		}
+		j = i
+	}
+	return inside
+}
+
+func resolveShapeArray(pos V2, r float64, objs []MapObject, shapeType string) V2 {
+	for _, obj := range objs {
+		if shapeType == "circle" {
+			dsq := pos.DistSq(V2{obj.X, obj.Y})
+			totalR := r + obj.R
+			if dsq < totalR*totalR && dsq > 0.0001 {
+				d := math.Sqrt(dsq)
+				overlap := totalR - d
+				dir := V2{pos.X - obj.X, pos.Y - obj.Y}.Mul(1 / d)
+				pos = pos.Add(dir.Mul(overlap))
+			}
+		} else if shapeType == "rect" {
+			closestX := clamp(pos.X, obj.X, obj.X+obj.W)
+			closestY := clamp(pos.Y, obj.Y, obj.Y+obj.H)
+			dsq := pos.DistSq(V2{closestX, closestY})
+			if dsq < r*r {
+				if dsq < 0.0001 {
+					distLeft := pos.X - obj.X
+					distRight := (obj.X + obj.W) - pos.X
+					distTop := pos.Y - obj.Y
+					distBottom := (obj.Y + obj.H) - pos.Y
+
+					minDist := distLeft
+					dir := V2{-1, 0}
+					if distRight < minDist {
+						minDist = distRight
+						dir = V2{1, 0}
+					}
+					if distTop < minDist {
+						minDist = distTop
+						dir = V2{0, -1}
+					}
+					if distBottom < minDist {
+						minDist = distBottom
+						dir = V2{0, 1}
+					}
+					pos = pos.Add(dir.Mul(minDist + r))
+				} else {
+					d := math.Sqrt(dsq)
+					overlap := r - d
+					dir := V2{pos.X - closestX, pos.Y - closestY}.Mul(1 / d)
+					pos = pos.Add(dir.Mul(overlap))
+				}
+			}
+		} else if shapeType == "poly" && len(obj.Points) > 2 {
+			inside := isPointInPoly(pos, obj.Points)
+			var closestEdgePt V2
+			minEdgeDistSq := math.MaxFloat64
+
+			for i := 0; i < len(obj.Points); i++ {
+				p1 := V2{obj.Points[i][0], obj.Points[i][1]}
+				j := (i + 1) % len(obj.Points)
+				p2 := V2{obj.Points[j][0], obj.Points[j][1]}
+
+				cpt := closestPointOnLineSegment(pos, p1, p2)
+				dsq := pos.DistSq(cpt)
+				if dsq < minEdgeDistSq {
+					minEdgeDistSq = dsq
+					closestEdgePt = cpt
+				}
+			}
+
+			if inside {
+				d := math.Sqrt(minEdgeDistSq)
+				dir := V2{closestEdgePt.X - pos.X, closestEdgePt.Y - pos.Y}
+				if d > 0.0001 {
+					dir = dir.Mul(1 / d)
+					pos = pos.Add(dir.Mul(d + r))
+				} else {
+					pos.X += r // fallback
+				}
+			} else if minEdgeDistSq < r*r {
+				d := math.Sqrt(minEdgeDistSq)
+				if d > 0.0001 {
+					overlap := r - d
+					dir := V2{pos.X - closestEdgePt.X, pos.Y - closestEdgePt.Y}.Mul(1 / d)
+					pos = pos.Add(dir.Mul(overlap))
+				}
+			}
+		}
+	}
+	return pos
+}
+
+func resolveCollisions(pos V2, r float64, static StaticScene, dyn DynamicScene) V2 {
+	pos = resolveShapeArray(pos, r, static.Rect, "rect")
+	pos = resolveShapeArray(pos, r, static.Circle, "circle")
+	pos = resolveShapeArray(pos, r, static.Poly, "poly")
+
+	pos = resolveShapeArray(pos, r, dyn.Rect, "rect")
+	pos = resolveShapeArray(pos, r, dyn.Circle, "circle")
+	pos = resolveShapeArray(pos, r, dyn.Poly, "poly")
+	return pos
+}
+
 // --------------- Static Map Definition ---------------
 
 func buildStaticMap() StaticScene {
@@ -518,6 +641,9 @@ func main() {
 				p.X, p.Y = pos.X, pos.Y
 			}
 
+			newPos := resolveCollisions(V2{p.X, p.Y}, PRadius, staticMap, dynMap)
+			p.X, p.Y = newPos.X, newPos.Y
+
 			p.X = clamp(p.X, PRadius, MapW-PRadius)
 			p.Y = clamp(p.Y, PRadius, MapH-PRadius)
 
@@ -556,6 +682,12 @@ func main() {
 			b.life--
 
 			if b.X < 0 || b.X > MapW || b.Y < 0 || b.Y > MapH || b.life <= 0 {
+				continue
+			}
+
+			bPos := V2{b.X, b.Y}
+			resolved := resolveCollisions(bPos, BRadius, staticMap, dynMap)
+			if resolved.DistSq(bPos) > 0.0001 {
 				continue
 			}
 
