@@ -189,6 +189,8 @@ type ViewFrame struct {
 	Kills   []KillEv           `json:"kills"`
 	Over    bool               `json:"over"`
 	Winner  string             `json:"winner,omitempty"`
+	Static  []MapObject        `json:"static,omitempty"`
+	Dynamic []MapObject        `json:"dynamic,omitempty"`
 }
 
 // --------------- Palette ---------------
@@ -602,6 +604,7 @@ func main() {
 				MapW: MapW, MapH: MapH,
 				Tick: tick, MaxTick: maxTick,
 				Kills: kills, Over: gameOver, Winner: winner,
+				Static: staticMap, Dynamic: dynMap,
 			}
 			data, _ := json.Marshal(vf)
 			emit(data)
@@ -622,6 +625,7 @@ func main() {
 		MapW: MapW, MapH: MapH,
 		Tick: tick, MaxTick: maxTick,
 		Kills: kills, Over: true, Winner: winner,
+		Static: staticMap, Dynamic: buildDynamicMap(tick),
 	}
 	fd, _ := json.Marshal(final)
 	emit(fd)

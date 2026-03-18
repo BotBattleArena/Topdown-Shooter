@@ -207,6 +207,40 @@ function render(now){
   ctx.lineWidth=3;
   ctx.strokeRect(0,0,mw,mh);
 
+  function drawObj(obj) {
+    if (obj.type === 'rect') {
+      ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+      ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
+    } else if (obj.type === 'circle') {
+      ctx.beginPath();
+      ctx.arc(obj.x, obj.y, obj.r, 0, PI2);
+      ctx.fill();
+      ctx.stroke();
+    } else if (obj.type === 'poly') {
+      if (obj.points && obj.points.length > 0) {
+        ctx.beginPath();
+        ctx.moveTo(obj.points[0][0], obj.points[0][1]);
+        for(var k=1; k<obj.points.length; k++) {
+          ctx.lineTo(obj.points[k][0], obj.points[k][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+
+  ctx.fillStyle = 'rgba(40, 40, 60, 0.6)';
+  ctx.strokeStyle = 'rgba(100, 100, 140, 0.8)';
+  ctx.lineWidth = 2;
+
+  if (state.static) {
+    for(var s=0; s<state.static.length; s++) drawObj(state.static[s]);
+  }
+  if (state.dynamic) {
+    for(var d=0; d<state.dynamic.length; d++) drawObj(state.dynamic[d]);
+  }
+
   var bulls=state.bullets;
   if(bulls&&bulls.length>0){
     ctx.globalAlpha=0.3;
