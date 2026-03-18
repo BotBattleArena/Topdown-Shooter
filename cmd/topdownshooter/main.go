@@ -7,7 +7,6 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -70,12 +69,12 @@ func (a V2) DistSq(b V2) float64 {
 // Type: "circle" uses X, Y, R
 // Type: "poly" uses Points (array of [x,y] pairs)
 type MapObject struct {
-	Type   string      `json:"type"`
-	X      float64     `json:"x,omitempty"`
-	Y      float64     `json:"y,omitempty"`
-	W      float64     `json:"w,omitempty"`
-	H      float64     `json:"h,omitempty"`
-	R      float64     `json:"r,omitempty"`
+	Type   string       `json:"type"`
+	X      float64      `json:"x,omitempty"`
+	Y      float64      `json:"y,omitempty"`
+	W      float64      `json:"w,omitempty"`
+	H      float64      `json:"h,omitempty"`
+	R      float64      `json:"r,omitempty"`
 	Points [][2]float64 `json:"points,omitempty"`
 }
 
@@ -156,7 +155,7 @@ type BulletView struct {
 type BotFrame struct {
 	Type    string         `json:"type"`
 	Tick    int            `json:"tick"`
-	Players []PlayerView  `json:"players"`
+	Players []PlayerView   `json:"players"`
 	Bullets []BulletView   `json:"bullets"`
 	Map     DynamicMapData `json:"map"`
 }
@@ -212,23 +211,6 @@ var palette = []string{
 	"#eccc68", "#a4b0be", "#57606f", "#747d8c", "#2f3542", "#dfe4ea",
 	"#ced6e0", "#f7d794", "#f3a683", "#786fa6", "#cf6a87", "#e77f67",
 	"#63cdda", "#ea8685", "#596275", "#303952", "#574b90", "#f78fb3",
-}
-
-// --------------- Config ---------------
-
-type Config struct {
-	InputDir string `json:"input_dir"`
-}
-
-func loadConfig(path string) (Config, error) {
-	var cfg Config
-	f, err := os.Open(path)
-	if err != nil {
-		return cfg, err
-	}
-	defer f.Close()
-	err = json.NewDecoder(f).Decode(&cfg)
-	return cfg, err
 }
 
 // --------------- SSE (Viewer) ---------------
@@ -308,10 +290,10 @@ func rndSpawn() V2 {
 func buildStaticMap() []MapObject {
 	return []MapObject{
 		// Boundary walls
-		{Type: "rect", X: 0, Y: 0, W: MapW, H: 50},          // top
-		{Type: "rect", X: 0, Y: 0, W: 50, H: MapH},          // left
-		{Type: "rect", X: MapW - 50, Y: 0, W: 50, H: MapH},  // right
-		{Type: "rect", X: 0, Y: MapH - 50, W: MapW, H: 50},  // bottom
+		{Type: "rect", X: 0, Y: 0, W: MapW, H: 50},         // top
+		{Type: "rect", X: 0, Y: 0, W: 50, H: MapH},         // left
+		{Type: "rect", X: MapW - 50, Y: 0, W: 50, H: MapH}, // right
+		{Type: "rect", X: 0, Y: MapH - 50, W: MapW, H: 50}, // bottom
 
 		// Central block
 		{Type: "rect", X: 900, Y: 900, W: 200, H: 200},
@@ -354,24 +336,15 @@ func main() {
 		log.Fatal(http.ListenAndServe(WebPort, nil))
 	}()
 
-	inputDirFlag := flag.String("input-dir", "", "path to bots input directory")
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: topdownshooter [flags]\n\nFlags:\n")
+		flag.PrintDefaults()
+	}
+	inputDir := flag.String("input-dir", "./bots/inputs", "(string) path to bots input directory")
 	flag.Parse()
 
-	var cfg Config
-	var err error
-
-	if *inputDirFlag != "" {
-		cfg.InputDir = *inputDirFlag
-	} else {
-		cfg, err = loadConfig("config.json")
-		if err != nil {
-			log.Printf("Warning: configuration not found or invalid, using defaults: %v", err)
-			cfg = Config{InputDir: "./bots/inputs"}
-		}
-	}
-
 	a, err := arena.New(arena.Config{
-		InputDir:      cfg.InputDir,
+		InputDir:      *inputDir,
 		ActionTimeout: AxesTimeout,
 		Axes: []arena.Axis{
 			{Name: "move_x", Value: 0},
@@ -395,7 +368,7 @@ func main() {
 
 	bots := a.Players()
 	if len(bots) == 0 {
-		log.Fatalf("No bots in %s", cfg.InputDir)
+		log.Fatalf("No bots in %s", *inputDir)
 	}
 	fmt.Printf("  %d bots loaded\n\n", len(bots))
 

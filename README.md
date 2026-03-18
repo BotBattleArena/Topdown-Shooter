@@ -4,6 +4,32 @@ This document describes the communication protocol between the Top-Down Shooter 
 
 ---
 
+## Running the Game
+
+```bash
+topdownshooter [flags]
+```
+
+### Flags
+
+| Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--input-dir` | `string` | `./bots/inputs` | Path to the directory containing bot executables. |
+| `--help` | | | Show all available flags and exit. |
+
+### Examples
+
+```bash
+# Run with default settings (bots in ./bots/inputs)
+topdownshooter
+
+# Run with a custom bots directory
+topdownshooter --input-dir ./my-bots
+
+# Show help
+topdownshooter --help
+```
+
 ## Communication Flow
 
 ```mermaid
