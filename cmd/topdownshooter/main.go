@@ -38,10 +38,13 @@ const (
 	BRadius    = 4.0
 	RespawnT   = 120
 
-	RoundSec = 60
-	WinKills = 30
-	WebPort  = ":8090"
+	RoundSec     = 60
+	WinKills     = 30
+	CountdownSec = 3
+	WebPort      = ":8090"
 )
+
+// --------------- Vector ---------------
 
 type V2 struct{ X, Y float64 }
 
@@ -60,6 +63,33 @@ func (a V2) DistSq(b V2) float64 {
 	return dx*dx + dy*dy
 }
 
+// --------------- Map Objects ---------------
+
+// MapObject is a union-style shape for map geometry.
+// Type: "rect" uses X, Y, W, H
+// Type: "circle" uses X, Y, R
+// Type: "poly" uses Points (array of [x,y] pairs)
+type MapObject struct {
+	Type   string      `json:"type"`
+	X      float64     `json:"x,omitempty"`
+	Y      float64     `json:"y,omitempty"`
+	W      float64     `json:"w,omitempty"`
+	H      float64     `json:"h,omitempty"`
+	R      float64     `json:"r,omitempty"`
+	Points [][2]float64 `json:"points,omitempty"`
+}
+
+type StaticMapData struct {
+	Static []MapObject `json:"static"`
+}
+
+type DynamicMapData struct {
+	Dynamic []MapObject `json:"dynamic"`
+}
+
+// --------------- Player ---------------
+
+// Player is the internal game state (includes fields not sent to bots).
 type Player struct {
 	ID      string  `json:"id"`
 	X       float64 `json:"x"`
@@ -79,6 +109,31 @@ type Player struct {
 	respawnT int
 }
 
+// PlayerView is the bot-facing player data (no alive, no color).
+type PlayerView struct {
+	ID      string  `json:"id"`
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+	AimX    float64 `json:"aim_x"`
+	AimY    float64 `json:"aim_y"`
+	HP      int     `json:"hp"`
+	Kills   int     `json:"kills"`
+	Deaths  int     `json:"deaths"`
+	ShootCD int     `json:"shoot_cd"`
+	DashCD  int     `json:"dash_cd"`
+}
+
+func playerToView(p *Player) PlayerView {
+	return PlayerView{
+		ID: p.ID, X: p.X, Y: p.Y,
+		AimX: p.AimX, AimY: p.AimY,
+		HP: p.HP, Kills: p.Kills, Deaths: p.Deaths,
+		ShootCD: p.ShootCD, DashCD: p.DashCD,
+	}
+}
+
+// --------------- Bullet ---------------
+
 type Bullet struct {
 	X     float64 `json:"x"`
 	Y     float64 `json:"y"`
@@ -88,22 +143,36 @@ type Bullet struct {
 	life  int
 }
 
+// BulletView is the bot-facing bullet data (no owner).
+type BulletView struct {
+	X  float64 `json:"x"`
+	Y  float64 `json:"y"`
+	DX float64 `json:"dx"`
+	DY float64 `json:"dy"`
+}
+
+// --------------- Bot Frame (state.tick) ---------------
+
+type BotFrame struct {
+	Type    string         `json:"type"`
+	Tick    int            `json:"tick"`
+	Players []PlayerView  `json:"players"`
+	Bullets []BulletView   `json:"bullets"`
+	Map     DynamicMapData `json:"map"`
+}
+
+// --------------- Kill Event ---------------
+
 type KillEv struct {
 	Killer string `json:"killer"`
 	Victim string `json:"victim"`
 	Tick   int    `json:"tick"`
 }
 
-type BotFrame struct {
-	Players map[string]*Player `json:"players"`
-	Bullets []BulletView       `json:"bullets"`
-	MapW    float64            `json:"map_w"`
-	MapH    float64            `json:"map_h"`
-	Tick    int                `json:"tick"`
-	Left    int                `json:"time_left"`
-}
+// --------------- Viewer Frame (for web viewer, unchanged) ---------------
 
-type BulletView struct {
+// ViewerBulletView includes owner for the spectator view.
+type ViewerBulletView struct {
 	X     float64 `json:"x"`
 	Y     float64 `json:"y"`
 	DX    float64 `json:"dx"`
@@ -112,16 +181,18 @@ type BulletView struct {
 }
 
 type ViewFrame struct {
-	Players []*Player    `json:"players"`
-	Bullets []BulletView `json:"bullets"`
-	MapW    float64      `json:"map_w"`
-	MapH    float64      `json:"map_h"`
-	Tick    int          `json:"tick"`
-	MaxTick int          `json:"max_tick"`
-	Kills   []KillEv     `json:"kills"`
-	Over    bool         `json:"over"`
-	Winner  string       `json:"winner,omitempty"`
+	Players []*Player          `json:"players"`
+	Bullets []ViewerBulletView `json:"bullets"`
+	MapW    float64            `json:"map_w"`
+	MapH    float64            `json:"map_h"`
+	Tick    int                `json:"tick"`
+	MaxTick int                `json:"max_tick"`
+	Kills   []KillEv           `json:"kills"`
+	Over    bool               `json:"over"`
+	Winner  string             `json:"winner,omitempty"`
 }
+
+// --------------- Palette ---------------
 
 var palette = []string{
 	"#e74c3c", "#2ecc71", "#3498db", "#f1c40f", "#e67e22", "#9b59b6",
@@ -143,6 +214,8 @@ var palette = []string{
 	"#63cdda", "#ea8685", "#596275", "#303952", "#574b90", "#f78fb3",
 }
 
+// --------------- Config ---------------
+
 type Config struct {
 	InputDir string `json:"input_dir"`
 }
@@ -157,6 +230,8 @@ func loadConfig(path string) (Config, error) {
 	err = json.NewDecoder(f).Decode(&cfg)
 	return cfg, err
 }
+
+// --------------- SSE (Viewer) ---------------
 
 var (
 	sseCh    = make(map[chan []byte]struct{})
@@ -211,6 +286,8 @@ func eventsEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// --------------- Helpers ---------------
+
 func clamp(v, lo, hi float64) float64 {
 	if v < lo {
 		return lo
@@ -225,6 +302,41 @@ func rndSpawn() V2 {
 	m := 80.0
 	return V2{m + rand.Float64()*(MapW-2*m), m + rand.Float64()*(MapH-2*m)}
 }
+
+// --------------- Static Map Definition ---------------
+
+func buildStaticMap() []MapObject {
+	return []MapObject{
+		// Boundary walls
+		{Type: "rect", X: 0, Y: 0, W: MapW, H: 50},          // top
+		{Type: "rect", X: 0, Y: 0, W: 50, H: MapH},          // left
+		{Type: "rect", X: MapW - 50, Y: 0, W: 50, H: MapH},  // right
+		{Type: "rect", X: 0, Y: MapH - 50, W: MapW, H: 50},  // bottom
+
+		// Central block
+		{Type: "rect", X: 900, Y: 900, W: 200, H: 200},
+
+		// Cover circles
+		{Type: "circle", X: 500, Y: 500, R: 80},
+		{Type: "circle", X: 1500, Y: 1500, R: 80},
+
+		// Triangular obstacles (as polygons)
+		{Type: "poly", Points: [][2]float64{{300, 1400}, {400, 1300}, {500, 1400}}},
+		{Type: "poly", Points: [][2]float64{{1500, 600}, {1600, 500}, {1700, 600}}},
+	}
+}
+
+// buildDynamicMap returns dynamic map objects that change each tick.
+func buildDynamicMap(tick int) []MapObject {
+	// A rect that oscillates horizontally
+	baseX := 650.0
+	offsetX := math.Sin(float64(tick)/60.0) * 200.0
+	return []MapObject{
+		{Type: "rect", X: baseX + offsetX, Y: 1000, W: 120, H: 40},
+	}
+}
+
+// --------------- Main ---------------
 
 func main() {
 	maxTick := RoundSec * TPS
@@ -303,15 +415,19 @@ func main() {
 	winner := ""
 	tick := 0
 
-	// Phase 0: Initialization
+	// ========== Phase 0: Setup ==========
+	staticMap := buildStaticMap()
+
 	setup := map[string]interface{}{
 		"type":             "setup",
-		"tps":              TPS,
 		"tick_duration_ms": 1000.0 / TPS,
 		"timeout_ms":       AxesTimeout.Seconds() * 1000,
+		"max_tick":         maxTick,
+		"countdown_sec":    CountdownSec,
+		"map": StaticMapData{
+			Static: staticMap,
+		},
 		"rules": map[string]interface{}{
-			"map_w":         MapW,
-			"map_h":         MapH,
 			"move_speed":    MoveSpeed,
 			"bullet_speed":  BulletSpd,
 			"damage":        Dmg,
@@ -322,9 +438,17 @@ func main() {
 		},
 	}
 	setupData, _ := json.Marshal(setup)
-	fmt.Println("  Sending initialization frame...")
-	a.RequestAxes(setupData, 100*time.Millisecond) // Give bots more time to initialize
+	fmt.Println("  Sending setup frame...")
+	a.SendState(setupData)
 
+	// ========== Countdown ==========
+	for i := CountdownSec; i > 0; i-- {
+		fmt.Printf("  Starting in %d...\n", i)
+		time.Sleep(time.Second)
+	}
+	fmt.Println("  GO!")
+
+	// ========== Phase 1: Game Loop ==========
 	ticker := time.NewTicker(TickDur)
 	defer ticker.Stop()
 
@@ -334,14 +458,27 @@ func main() {
 		}
 		tick++
 
+		// Build bot-facing bullet list (no owner)
 		bvs := make([]BulletView, len(bullets))
 		for i, b := range bullets {
-			bvs[i] = BulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
+			bvs[i] = BulletView{X: b.X, Y: b.Y, DX: b.DX, DY: b.DY}
 		}
+
+		// Build bot-facing player list (no alive, no color)
+		pvs := make([]PlayerView, 0, len(players))
+		for _, p := range players {
+			pvs = append(pvs, playerToView(p))
+		}
+
+		// Build dynamic map
+		dynMap := buildDynamicMap(tick)
+
 		bf := BotFrame{
-			Players: players, Bullets: bvs,
-			MapW: MapW, MapH: MapH,
-			Tick: tick, Left: (maxTick - tick) / TPS,
+			Type:    "tick",
+			Tick:    tick,
+			Players: pvs,
+			Bullets: bvs,
+			Map:     DynamicMapData{Dynamic: dynMap},
 		}
 		state, _ := json.Marshal(bf)
 		resp := a.RequestAxes(state, AxesTimeout)
@@ -477,17 +614,18 @@ func main() {
 			}
 		}
 
+		// Emit viewer frame (every 3 ticks)
 		if tick%3 == 0 {
 			pList := make([]*Player, 0, len(players))
 			for _, p := range players {
 				pList = append(pList, p)
 			}
-			bvs2 := make([]BulletView, len(bullets))
+			vbvs := make([]ViewerBulletView, len(bullets))
 			for i, b := range bullets {
-				bvs2[i] = BulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
+				vbvs[i] = ViewerBulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
 			}
 			vf := ViewFrame{
-				Players: pList, Bullets: bvs2,
+				Players: pList, Bullets: vbvs,
 				MapW: MapW, MapH: MapH,
 				Tick: tick, MaxTick: maxTick,
 				Kills: kills, Over: gameOver, Winner: winner,
@@ -497,16 +635,17 @@ func main() {
 		}
 	}
 
+	// Final viewer frame
 	pList := make([]*Player, 0, len(players))
 	for _, p := range players {
 		pList = append(pList, p)
 	}
-	bvsFinal := make([]BulletView, len(bullets))
+	vbvsFinal := make([]ViewerBulletView, len(bullets))
 	for i, b := range bullets {
-		bvsFinal[i] = BulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
+		vbvsFinal[i] = ViewerBulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
 	}
 	final := ViewFrame{
-		Players: pList, Bullets: bvsFinal,
+		Players: pList, Bullets: vbvsFinal,
 		MapW: MapW, MapH: MapH,
 		Tick: tick, MaxTick: maxTick,
 		Kills: kills, Over: true, Winner: winner,
