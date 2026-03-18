@@ -185,12 +185,12 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
     "scene": {
       "dynamic": {
         "rect": [
-          { "type": "rect", "x": 650, "y": 1000, "w": 120, "h": 40 }
+          { "x": 650, "y": 1000, "w": 120, "h": 40 }
         ],
         "bullets": [
-          { "type": "bullet", "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 },
-          { "type": "bullet", "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 },
-          { "type": "bullet", "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 }
+          { "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 },
+          { "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 },
+          { "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 }
         ]
       }
     }

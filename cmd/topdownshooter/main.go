@@ -316,7 +316,7 @@ func buildDynamicMap(tick int) DynamicScene {
 	offsetX := math.Sin(float64(tick)/60.0) * 200.0
 	return DynamicScene{
 		Rect: []MapObject{
-			{Type: "rect", X: baseX + offsetX, Y: 1000, W: 120, H: 40},
+			{X: baseX + offsetX, Y: 1000, W: 120, H: 40},
 		},
 	}
 }
@@ -440,7 +440,7 @@ func main() {
 		dynMap := buildDynamicMap(tick)
 		for _, b := range bullets {
 			dynMap.Bullets = append(dynMap.Bullets, MapObject{
-				Type: "bullet", X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY,
+				X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY,
 			})
 		}
 
@@ -601,7 +601,7 @@ func main() {
 			viewDyn := buildDynamicMap(tick)
 			for _, b := range bullets {
 				viewDyn.Bullets = append(viewDyn.Bullets, MapObject{
-					Type: "bullet", X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
+					X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
 				})
 			}
 			
@@ -624,7 +624,7 @@ func main() {
 	viewDynFinal := buildDynamicMap(tick)
 	for _, b := range bullets {
 		viewDynFinal.Bullets = append(viewDynFinal.Bullets, MapObject{
-			Type: "bullet", X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
+			X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
 		})
 	}
 	final := ViewFrame{
