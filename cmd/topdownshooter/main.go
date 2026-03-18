@@ -66,7 +66,18 @@ func (a V2) DistSq(b V2) float64 {
 
 // MapObject is a unified geometric shape for rect, circle, poly, and bullet.
 type MapObject struct {
-	Type   string       `json:"type,omitempty"`
+	X      float64      `json:"x,omitempty"`
+	Y      float64      `json:"y,omitempty"`
+	W      float64      `json:"w,omitempty"`
+	H      float64      `json:"h,omitempty"`
+	R      float64      `json:"r,omitempty"`
+	DX     float64      `json:"dx,omitempty"`
+	DY     float64      `json:"dy,omitempty"`
+	Points [][2]float64 `json:"points,omitempty"`
+}
+
+// ViewerMapObject extends MapObject with an owner ID for the web UI.
+type ViewerMapObject struct {
 	X      float64      `json:"x,omitempty"`
 	Y      float64      `json:"y,omitempty"`
 	W      float64      `json:"w,omitempty"`
@@ -101,11 +112,18 @@ type SceneTick struct {
 	Dynamic DynamicScene `json:"dynamic"`
 }
 
+type ViewerDynamicScene struct {
+	Rect    []MapObject       `json:"rect,omitempty"`
+	Circle  []MapObject       `json:"circle,omitempty"`
+	Poly    []MapObject       `json:"poly,omitempty"`
+	Bullets []ViewerMapObject `json:"bullets,omitempty"`
+}
+
 type ViewScene struct {
-	MapW    float64      `json:"mapw"`
-	MapH    float64      `json:"maph"`
-	Static  StaticScene  `json:"static,omitempty"`
-	Dynamic DynamicScene `json:"dynamic,omitempty"`
+	MapW    float64            `json:"mapw"`
+	MapH    float64            `json:"maph"`
+	Static  StaticScene        `json:"static,omitempty"`
+	Dynamic ViewerDynamicScene `json:"dynamic,omitempty"`
 }
 
 // --------------- Player ---------------
@@ -598,9 +616,14 @@ func main() {
 			}
 			
 			// Rebuild dynamic map but with bullets containing owners for the viewer
-			viewDyn := buildDynamicMap(tick)
+			baseDyn := buildDynamicMap(tick)
+			viewDyn := ViewerDynamicScene{
+				Rect:   baseDyn.Rect,
+				Circle: baseDyn.Circle,
+				Poly:   baseDyn.Poly,
+			}
 			for _, b := range bullets {
-				viewDyn.Bullets = append(viewDyn.Bullets, MapObject{
+				viewDyn.Bullets = append(viewDyn.Bullets, ViewerMapObject{
 					X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
 				})
 			}
@@ -621,9 +644,14 @@ func main() {
 	for _, p := range players {
 		pList = append(pList, p)
 	}
-	viewDynFinal := buildDynamicMap(tick)
+	baseDynFinal := buildDynamicMap(tick)
+	viewDynFinal := ViewerDynamicScene{
+		Rect:   baseDynFinal.Rect,
+		Circle: baseDynFinal.Circle,
+		Poly:   baseDynFinal.Poly,
+	}
 	for _, b := range bullets {
-		viewDynFinal.Bullets = append(viewDynFinal.Bullets, MapObject{
+		viewDynFinal.Bullets = append(viewDynFinal.Bullets, ViewerMapObject{
 			X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
 		})
 	}
