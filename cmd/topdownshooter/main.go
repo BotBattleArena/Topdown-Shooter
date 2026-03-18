@@ -23,7 +23,7 @@ const (
 
 	TPS         = 60
 	TickDur     = time.Second / TPS
-	AxesTimeout = 20 * time.Millisecond
+	AxesTimeout = 12 * time.Millisecond
 
 	MoveSpeed  = 3.5
 	DashSpd    = 14.0
@@ -302,6 +302,28 @@ func main() {
 	gameOver := false
 	winner := ""
 	tick := 0
+
+	// Phase 0: Initialization
+	setup := map[string]interface{}{
+		"type":             "setup",
+		"tps":              TPS,
+		"tick_duration_ms": 1000.0 / TPS,
+		"timeout_ms":       AxesTimeout.Seconds() * 1000,
+		"rules": map[string]interface{}{
+			"map_w":        MapW,
+			"map_h":        MapH,
+			"move_speed":   MoveSpeed,
+			"bullet_speed": BulletSpd,
+			"damage":       Dmg,
+			"win_kills":    WinKills,
+			"respawn_ticks": RespawnT,
+			"shoot_cd":     ShootCD,
+			"dash_cd":      DashCD,
+		},
+	}
+	setupData, _ := json.Marshal(setup)
+	fmt.Println("  Sending initialization frame...")
+	a.RequestAxes(setupData, 100*time.Millisecond) // Give bots more time to initialize
 
 	ticker := time.NewTicker(TickDur)
 	defer ticker.Stop()
