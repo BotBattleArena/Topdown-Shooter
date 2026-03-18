@@ -209,16 +209,16 @@ function render(now){
   ctx.lineWidth=3;
   ctx.strokeRect(0,0,mw,mh);
 
-  function drawObj(obj) {
-    if (obj.type === 'rect') {
+  function drawObj(obj, type) {
+    if (type === 'rect') {
       ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
       ctx.strokeRect(obj.x, obj.y, obj.w, obj.h);
-    } else if (obj.type === 'circle') {
+    } else if (type === 'circle') {
       ctx.beginPath();
       ctx.arc(obj.x, obj.y, obj.r, 0, PI2);
       ctx.fill();
       ctx.stroke();
-    } else if (obj.type === 'poly') {
+    } else if (type === 'poly') {
       if (obj.points && obj.points.length > 0) {
         ctx.beginPath();
         ctx.moveTo(obj.points[0][0], obj.points[0][1]);
@@ -238,15 +238,15 @@ function render(now){
 
   if (state.scene && state.scene.static) {
     var st = state.scene.static;
-    if(st.rect) for(var s=0; s<st.rect.length; s++) drawObj(st.rect[s]);
-    if(st.circle) for(var s=0; s<st.circle.length; s++) drawObj(st.circle[s]);
-    if(st.poly) for(var s=0; s<st.poly.length; s++) drawObj(st.poly[s]);
+    if(st.rect) for(var s=0; s<st.rect.length; s++) drawObj(st.rect[s], 'rect');
+    if(st.circle) for(var s=0; s<st.circle.length; s++) drawObj(st.circle[s], 'circle');
+    if(st.poly) for(var s=0; s<st.poly.length; s++) drawObj(st.poly[s], 'poly');
   }
   if (state.scene && state.scene.dynamic) {
     var dy = state.scene.dynamic;
-    if(dy.rect) for(var d=0; d<dy.rect.length; d++) drawObj(dy.rect[d]);
-    if(dy.circle) for(var d=0; d<dy.circle.length; d++) drawObj(dy.circle[d]);
-    if(dy.poly) for(var d=0; d<dy.poly.length; d++) drawObj(dy.poly[d]);
+    if(dy.rect) for(var d=0; d<dy.rect.length; d++) drawObj(dy.rect[d], 'rect');
+    if(dy.circle) for(var d=0; d<dy.circle.length; d++) drawObj(dy.circle[d], 'circle');
+    if(dy.poly) for(var d=0; d<dy.poly.length; d++) drawObj(dy.poly[d], 'poly');
   }
 
   var bulls=(state.scene && state.scene.dynamic)?state.scene.dynamic.bullets:null;
