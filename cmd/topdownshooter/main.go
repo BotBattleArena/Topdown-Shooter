@@ -143,6 +143,10 @@ type Player struct {
 	DashCD  int     `json:"dash_cd"`
 	Color   string  `json:"color"`
 
+	PingTotal time.Duration
+	PingCount int
+	Timeouts  int
+
 	dashing  int
 	dashDir  V2
 	respawnT int
@@ -202,13 +206,13 @@ type KillEv struct {
 // --------------- Viewer Frame (for web viewer, unchanged) ---------------
 
 type ViewFrame struct {
-	Players []*Player  `json:"players"`
-	Tick    int        `json:"tick"`
-	MaxTick int        `json:"max_tick"`
-	Kills   []KillEv   `json:"kills"`
-	Over    bool       `json:"over"`
-	Winner  string     `json:"winner,omitempty"`
-	Scene   ViewScene  `json:"scene"`
+	Players []*Player `json:"players"`
+	Tick    int       `json:"tick"`
+	MaxTick int       `json:"max_tick"`
+	Kills   []KillEv  `json:"kills"`
+	Over    bool      `json:"over"`
+	Winner  string    `json:"winner,omitempty"`
+	Scene   ViewScene `json:"scene"`
 }
 
 // --------------- Palette ---------------
@@ -615,7 +619,17 @@ func main() {
 				continue
 			}
 
-			axes := resp[id]
+			axes := make(map[string]float32)
+			if res, ok := resp[id]; ok {
+				if res.TimedOut {
+					p.Timeouts++
+				} else {
+					p.PingTotal += res.Duration
+					p.PingCount++
+				}
+				axes = res.Axes
+			}
+
 			mx := clamp(float64(axes["move_x"]), -1, 1)
 			my := clamp(float64(axes["move_y"]), -1, 1)
 			ax := clamp(float64(axes["aim_x"]), -1, 1)
@@ -746,7 +760,7 @@ func main() {
 			for _, p := range players {
 				pList = append(pList, p)
 			}
-			
+
 			// Rebuild dynamic map but with bullets containing owners for the viewer
 			baseDyn := buildDynamicMap(tick)
 			viewDyn := ViewerDynamicScene{
@@ -759,12 +773,12 @@ func main() {
 					X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
 				})
 			}
-			
+
 			vf := ViewFrame{
 				Players: pList,
-				Tick: tick, MaxTick: maxTick,
+				Tick:    tick, MaxTick: maxTick,
 				Kills: kills, Over: gameOver, Winner: winner,
-				Scene: ViewScene{ MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDyn },
+				Scene: ViewScene{MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDyn},
 			}
 			data, _ := json.Marshal(vf)
 			emit(data)
@@ -789,28 +803,33 @@ func main() {
 	}
 	final := ViewFrame{
 		Players: pList,
-		Tick: tick, MaxTick: maxTick,
+		Tick:    tick, MaxTick: maxTick,
 		Kills: kills, Over: true, Winner: winner,
-		Scene: ViewScene{ MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDynFinal },
+		Scene: ViewScene{MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDynFinal},
 	}
 	fd, _ := json.Marshal(final)
 	emit(fd)
 
 	fmt.Println("\n=== Round Over ===")
 	fmt.Printf("Winner: %s\n", winner)
-	lb := make([]struct {
-		id string
-		k  int
-	}, 0, len(players))
+	type lbEntry struct {
+		id       string
+		k        int
+		avgPing  time.Duration
+		timeouts int
+	}
+	lb := make([]lbEntry, 0, len(players))
 	for _, p := range players {
-		lb = append(lb, struct {
-			id string
-			k  int
-		}{p.ID, p.Kills})
+		avg := time.Duration(0)
+		if p.PingCount > 0 {
+			avg = p.PingTotal / time.Duration(p.PingCount)
+		}
+		lb = append(lb, lbEntry{p.ID, p.Kills, avg, p.Timeouts})
 	}
 	sort.Slice(lb, func(i, j int) bool { return lb[i].k > lb[j].k })
 	for i, e := range lb {
-		fmt.Printf("  #%d %s — %d kills\n", i+1, e.id, e.k)
+		fmt.Printf("  #%d %s — %d kills | avg ping: %dµs | timeouts: %d\n",
+			i+1, e.id, e.k, e.avgPing.Microseconds(), e.timeouts)
 	}
 	time.Sleep(5 * time.Second)
 }
