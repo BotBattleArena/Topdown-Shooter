@@ -110,18 +110,25 @@ After this message, the server waits `countdown_sec` seconds before starting the
     "timeout_ms": 12,
     "max_tick": 3600,
     "countdown_sec": 3,
-    "map": {
-      "static": [
-        { "type": "rect", "x": 0, "y": 0, "w": 2000, "h": 50 },
-        { "type": "rect", "x": 0, "y": 0, "w": 50, "h": 2000 },
-        { "type": "rect", "x": 1950, "y": 0, "w": 50, "h": 2000 },
-        { "type": "rect", "x": 0, "y": 1950, "w": 2000, "h": 50 },
-        { "type": "rect", "x": 900, "y": 900, "w": 200, "h": 200 },
-        { "type": "circle", "x": 500, "y": 500, "r": 80 },
-        { "type": "circle", "x": 1500, "y": 1500, "r": 80 },
-        { "type": "poly", "points": [[300,1400],[400,1300],[500,1400]] },
-        { "type": "poly", "points": [[1500,600],[1600,500],[1700,600]] }
-      ]
+    "scene": {
+      "mapw": 2000,
+      "maph": 2000,
+      "static": {
+        "rect": [
+          {"x": 0, "y": 0, "w": 2000, "h": 50},
+          {"x": 0, "y": 0, "w": 50, "h": 2000},
+          {"x": 1950, "y": 0, "w": 50, "h": 2000},
+          {"x": 0, "y": 1950, "w": 2000, "h": 50},
+        ],
+        "circle": [
+          {"x": 500, "y": 500, "r": 80},
+          {"x": 1500, "y": 1500, "r": 80},
+        ],
+        "poly": [
+          {"points": [[300,1400],[400,1300],[500,1400]]},
+          {"points": [[1500,600],[1600,500],[1700,600]]}
+        ]
+      }
     },
     "rules": {
       "move_speed": 3.5,
@@ -144,7 +151,9 @@ After this message, the server waits `countdown_sec` seconds before starting the
 | `timeout_ms` | `Float` | Max time (ms) the bot has to respond per tick. |
 | `max_tick` | `Int` | Total ticks in the round. |
 | `countdown_sec` | `Int` | Seconds the server waits before the first tick. |
-| `map.static` | `Array<MapObject>` | Static map geometry (does not change during the game). |
+| `scene` | `Object` | The map and static geometries. |
+| `scene.mapw`, `scene.maph` | `Float` | The dimensions of the map. |
+| `scene.static` | `Object` | Contains arrays grouped by map object types (`rect`, `circle`, `poly`). |
 | `rules` | `Object` | Game constants (speeds, cooldowns, win conditions). |
 
 ---
@@ -173,13 +182,17 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
         "dash_cd": 120
       }
     ],
-    "bullets": [
-      { "x": 150.0, "y": 160.0, "dx": 1.0, "dy": 0.0 }
-    ],
-    "map": {
-      "dynamic": [
-        { "type": "rect", "x": 650, "y": 1000, "w": 120, "h": 40 }
-      ]
+    "scene": {
+      "dynamic": {
+        "rect": [
+          { "type": "rect", "x": 650, "y": 1000, "w": 120, "h": 40 }
+        ],
+        "bullets": [
+          { "type": "bullet", "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 },
+          { "type": "bullet", "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 },
+          { "type": "bullet", "x": 150.0, "y": 160.0, "r": 4, "dx": 1.0, "dy": 0.0 }
+        ]
+      }
     }
   }
 }
@@ -191,8 +204,7 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
 | :--- | :--- | :--- |
 | `tick` | `Int` | Current game tick number. |
 | `players` | `Array<Player>` | All players in the game. |
-| `bullets` | `Array<Bullet>` | All active bullets. |
-| `map.dynamic` | `Array<MapObject>` | Dynamic map objects (positions change every tick). |
+| `scene.dynamic` | `Object` | Dynamic geometry grouped by type (`rect`, `bullets`, etc.). |
 
 #### Player Object
 
@@ -207,20 +219,14 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
 | `shoot_cd` | `Int` | Ticks until the bot can shoot again. |
 | `dash_cd` | `Int` | Ticks until the bot can dash again. |
 
-#### Bullet Object
-
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `x`, `y` | `Float` | Current position. |
-| `dx`, `dy` | `Float` | Normalized direction vector. |
-
 #### Map Object (applies to both static and dynamic)
 
 | Type | Fields | Description |
 | :--- | :--- | :--- |
-| `rect` | `x`, `y`, `w`, `h` | Rectangle at position (x, y) with width and height. |
-| `circle` | `x`, `y`, `r` | Circle at center (x, y) with radius r. |
+| `rect` | `x`, `y`, `w`, `h` | Rectangle at position (x, y) with width `w` and height `h`. |
+| `circle` | `x`, `y`, `r` | Circle at center (x, y) with radius `r`. |
 | `poly` | `points` | Polygon defined by an array of `[x, y]` coordinate pairs. |
+| `bullet` | `x`, `y`, `dx`, `dy`, `r` | Bullet at center `x`, `y`, with radius `r` and direction `dx`, `dy`. |
 
 ---
 

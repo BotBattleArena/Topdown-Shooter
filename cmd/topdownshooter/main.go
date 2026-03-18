@@ -64,26 +64,48 @@ func (a V2) DistSq(b V2) float64 {
 
 // --------------- Map Objects ---------------
 
-// MapObject is a union-style shape for map geometry.
-// Type: "rect" uses X, Y, W, H
-// Type: "circle" uses X, Y, R
-// Type: "poly" uses Points (array of [x,y] pairs)
+// MapObject is a unified geometric shape for rect, circle, poly, and bullet.
 type MapObject struct {
-	Type   string       `json:"type"`
+	Type   string       `json:"type,omitempty"`
 	X      float64      `json:"x,omitempty"`
 	Y      float64      `json:"y,omitempty"`
 	W      float64      `json:"w,omitempty"`
 	H      float64      `json:"h,omitempty"`
 	R      float64      `json:"r,omitempty"`
+	DX     float64      `json:"dx,omitempty"`
+	DY     float64      `json:"dy,omitempty"`
+	Owner  string       `json:"owner,omitempty"`
 	Points [][2]float64 `json:"points,omitempty"`
 }
 
-type StaticMapData struct {
-	Static []MapObject `json:"static"`
+type StaticScene struct {
+	Rect   []MapObject `json:"rect,omitempty"`
+	Circle []MapObject `json:"circle,omitempty"`
+	Poly   []MapObject `json:"poly,omitempty"`
 }
 
-type DynamicMapData struct {
-	Dynamic []MapObject `json:"dynamic"`
+type DynamicScene struct {
+	Rect    []MapObject `json:"rect,omitempty"`
+	Circle  []MapObject `json:"circle,omitempty"`
+	Poly    []MapObject `json:"poly,omitempty"`
+	Bullets []MapObject `json:"bullets,omitempty"`
+}
+
+type SceneSetup struct {
+	MapW   float64     `json:"mapw"`
+	MapH   float64     `json:"maph"`
+	Static StaticScene `json:"static"`
+}
+
+type SceneTick struct {
+	Dynamic DynamicScene `json:"dynamic"`
+}
+
+type ViewScene struct {
+	MapW    float64      `json:"mapw"`
+	MapH    float64      `json:"maph"`
+	Static  StaticScene  `json:"static,omitempty"`
+	Dynamic DynamicScene `json:"dynamic,omitempty"`
 }
 
 // --------------- Player ---------------
@@ -142,22 +164,13 @@ type Bullet struct {
 	life  int
 }
 
-// BulletView is the bot-facing bullet data (no owner).
-type BulletView struct {
-	X  float64 `json:"x"`
-	Y  float64 `json:"y"`
-	DX float64 `json:"dx"`
-	DY float64 `json:"dy"`
-}
-
 // --------------- Bot Frame (state.tick) ---------------
 
 type BotFrame struct {
-	Type    string         `json:"type"`
-	Tick    int            `json:"tick"`
-	Players []PlayerView   `json:"players"`
-	Bullets []BulletView   `json:"bullets"`
-	Map     DynamicMapData `json:"map"`
+	Type    string       `json:"type"`
+	Tick    int          `json:"tick"`
+	Players []PlayerView `json:"players"`
+	Scene   SceneTick    `json:"scene"`
 }
 
 // --------------- Kill Event ---------------
@@ -170,27 +183,14 @@ type KillEv struct {
 
 // --------------- Viewer Frame (for web viewer, unchanged) ---------------
 
-// ViewerBulletView includes owner for the spectator view.
-type ViewerBulletView struct {
-	X     float64 `json:"x"`
-	Y     float64 `json:"y"`
-	DX    float64 `json:"dx"`
-	DY    float64 `json:"dy"`
-	Owner string  `json:"owner"`
-}
-
 type ViewFrame struct {
-	Players []*Player          `json:"players"`
-	Bullets []ViewerBulletView `json:"bullets"`
-	MapW    float64            `json:"map_w"`
-	MapH    float64            `json:"map_h"`
-	Tick    int                `json:"tick"`
-	MaxTick int                `json:"max_tick"`
-	Kills   []KillEv           `json:"kills"`
-	Over    bool               `json:"over"`
-	Winner  string             `json:"winner,omitempty"`
-	Static  []MapObject        `json:"static,omitempty"`
-	Dynamic []MapObject        `json:"dynamic,omitempty"`
+	Players []*Player  `json:"players"`
+	Tick    int        `json:"tick"`
+	MaxTick int        `json:"max_tick"`
+	Kills   []KillEv   `json:"kills"`
+	Over    bool       `json:"over"`
+	Winner  string     `json:"winner,omitempty"`
+	Scene   ViewScene  `json:"scene"`
 }
 
 // --------------- Palette ---------------
@@ -289,34 +289,35 @@ func rndSpawn() V2 {
 
 // --------------- Static Map Definition ---------------
 
-func buildStaticMap() []MapObject {
-	return []MapObject{
-		// Boundary walls
-		{Type: "rect", X: 0, Y: 0, W: MapW, H: 50},         // top
-		{Type: "rect", X: 0, Y: 0, W: 50, H: MapH},         // left
-		{Type: "rect", X: MapW - 50, Y: 0, W: 50, H: MapH}, // right
-		{Type: "rect", X: 0, Y: MapH - 50, W: MapW, H: 50}, // bottom
-
-		// Central block
-		{Type: "rect", X: 900, Y: 900, W: 200, H: 200},
-
-		// Cover circles
-		{Type: "circle", X: 500, Y: 500, R: 80},
-		{Type: "circle", X: 1500, Y: 1500, R: 80},
-
-		// Triangular obstacles (as polygons)
-		{Type: "poly", Points: [][2]float64{{300, 1400}, {400, 1300}, {500, 1400}}},
-		{Type: "poly", Points: [][2]float64{{1500, 600}, {1600, 500}, {1700, 600}}},
+func buildStaticMap() StaticScene {
+	return StaticScene{
+		Rect: []MapObject{
+			{X: 0, Y: 0, W: MapW, H: 50},
+			{X: 0, Y: 0, W: 50, H: MapH},
+			{X: MapW - 50, Y: 0, W: 50, H: MapH},
+			{X: 0, Y: MapH - 50, W: MapW, H: 50},
+			{X: 900, Y: 900, W: 200, H: 200},
+		},
+		Circle: []MapObject{
+			{X: 500, Y: 500, R: 80},
+			{X: 1500, Y: 1500, R: 80},
+		},
+		Poly: []MapObject{
+			{Points: [][2]float64{{300, 1400}, {400, 1300}, {500, 1400}}},
+			{Points: [][2]float64{{1500, 600}, {1600, 500}, {1700, 600}}},
+		},
 	}
 }
 
 // buildDynamicMap returns dynamic map objects that change each tick.
-func buildDynamicMap(tick int) []MapObject {
+func buildDynamicMap(tick int) DynamicScene {
 	// A rect that oscillates horizontally
 	baseX := 650.0
 	offsetX := math.Sin(float64(tick)/60.0) * 200.0
-	return []MapObject{
-		{Type: "rect", X: baseX + offsetX, Y: 1000, W: 120, H: 40},
+	return DynamicScene{
+		Rect: []MapObject{
+			{Type: "rect", X: baseX + offsetX, Y: 1000, W: 120, H: 40},
+		},
 	}
 }
 
@@ -399,7 +400,9 @@ func main() {
 		"timeout_ms":       AxesTimeout.Seconds() * 1000,
 		"max_tick":         maxTick,
 		"countdown_sec":    CountdownSec,
-		"map": StaticMapData{
+		"scene": SceneSetup{
+			MapW:   MapW,
+			MapH:   MapH,
 			Static: staticMap,
 		},
 		"rules": map[string]interface{}{
@@ -433,10 +436,12 @@ func main() {
 		}
 		tick++
 
-		// Build bot-facing bullet list (no owner)
-		bvs := make([]BulletView, len(bullets))
-		for i, b := range bullets {
-			bvs[i] = BulletView{X: b.X, Y: b.Y, DX: b.DX, DY: b.DY}
+		// Build dynamic scene including map objects and bullets
+		dynMap := buildDynamicMap(tick)
+		for _, b := range bullets {
+			dynMap.Bullets = append(dynMap.Bullets, MapObject{
+				Type: "bullet", X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY,
+			})
 		}
 
 		// Build bot-facing player list (no alive, no color)
@@ -445,15 +450,11 @@ func main() {
 			pvs = append(pvs, playerToView(p))
 		}
 
-		// Build dynamic map
-		dynMap := buildDynamicMap(tick)
-
 		bf := BotFrame{
 			Type:    "tick",
 			Tick:    tick,
 			Players: pvs,
-			Bullets: bvs,
-			Map:     DynamicMapData{Dynamic: dynMap},
+			Scene:   SceneTick{Dynamic: dynMap},
 		}
 		state, _ := json.Marshal(bf)
 		resp := a.RequestAxes(state, AxesTimeout)
@@ -595,16 +596,20 @@ func main() {
 			for _, p := range players {
 				pList = append(pList, p)
 			}
-			vbvs := make([]ViewerBulletView, len(bullets))
-			for i, b := range bullets {
-				vbvs[i] = ViewerBulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
+			
+			// Rebuild dynamic map but with bullets containing owners for the viewer
+			viewDyn := buildDynamicMap(tick)
+			for _, b := range bullets {
+				viewDyn.Bullets = append(viewDyn.Bullets, MapObject{
+					Type: "bullet", X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
+				})
 			}
+			
 			vf := ViewFrame{
-				Players: pList, Bullets: vbvs,
-				MapW: MapW, MapH: MapH,
+				Players: pList,
 				Tick: tick, MaxTick: maxTick,
 				Kills: kills, Over: gameOver, Winner: winner,
-				Static: staticMap, Dynamic: dynMap,
+				Scene: ViewScene{ MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDyn },
 			}
 			data, _ := json.Marshal(vf)
 			emit(data)
@@ -616,16 +621,17 @@ func main() {
 	for _, p := range players {
 		pList = append(pList, p)
 	}
-	vbvsFinal := make([]ViewerBulletView, len(bullets))
-	for i, b := range bullets {
-		vbvsFinal[i] = ViewerBulletView{b.X, b.Y, b.DX, b.DY, b.Owner}
+	viewDynFinal := buildDynamicMap(tick)
+	for _, b := range bullets {
+		viewDynFinal.Bullets = append(viewDynFinal.Bullets, MapObject{
+			Type: "bullet", X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
+		})
 	}
 	final := ViewFrame{
-		Players: pList, Bullets: vbvsFinal,
-		MapW: MapW, MapH: MapH,
+		Players: pList,
 		Tick: tick, MaxTick: maxTick,
 		Kills: kills, Over: true, Winner: winner,
-		Static: staticMap, Dynamic: buildDynamicMap(tick),
+		Scene: ViewScene{ MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDynFinal },
 	}
 	fd, _ := json.Marshal(final)
 	emit(fd)

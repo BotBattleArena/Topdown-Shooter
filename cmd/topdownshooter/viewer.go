@@ -180,8 +180,10 @@ function render(now){
   cam.zoom+=(targetZoom-cam.zoom)*0.08;
 
   if(autoFollow){
-    var tx = state.map_w * 0.5;
-    var ty = state.map_h * 0.5;
+    var smw = state.scene ? state.scene.mapw : 2000;
+    var smh = state.scene ? state.scene.maph : 2000;
+    var tx = smw * 0.5;
+    var ty = smh * 0.5;
     cam.x += (tx - cam.x) * 0.05;
     cam.y += (ty - cam.y) * 0.05;
   }
@@ -194,7 +196,7 @@ function render(now){
   ctx.scale(cam.zoom,cam.zoom);
   ctx.translate(-cam.x,-cam.y);
 
-  var mw=state.map_w,mh=state.map_h;
+  var mw=(state.scene)?state.scene.mapw:2000,mh=(state.scene)?state.scene.maph:2000;
 
   ctx.strokeStyle='rgba(255,255,255,0.03)';
   ctx.lineWidth=1;
@@ -234,14 +236,20 @@ function render(now){
   ctx.strokeStyle = 'rgba(100, 100, 140, 0.8)';
   ctx.lineWidth = 2;
 
-  if (state.static) {
-    for(var s=0; s<state.static.length; s++) drawObj(state.static[s]);
+  if (state.scene && state.scene.static) {
+    var st = state.scene.static;
+    if(st.rect) for(var s=0; s<st.rect.length; s++) drawObj(st.rect[s]);
+    if(st.circle) for(var s=0; s<st.circle.length; s++) drawObj(st.circle[s]);
+    if(st.poly) for(var s=0; s<st.poly.length; s++) drawObj(st.poly[s]);
   }
-  if (state.dynamic) {
-    for(var d=0; d<state.dynamic.length; d++) drawObj(state.dynamic[d]);
+  if (state.scene && state.scene.dynamic) {
+    var dy = state.scene.dynamic;
+    if(dy.rect) for(var d=0; d<dy.rect.length; d++) drawObj(dy.rect[d]);
+    if(dy.circle) for(var d=0; d<dy.circle.length; d++) drawObj(dy.circle[d]);
+    if(dy.poly) for(var d=0; d<dy.poly.length; d++) drawObj(dy.poly[d]);
   }
 
-  var bulls=state.bullets;
+  var bulls=(state.scene && state.scene.dynamic)?state.scene.dynamic.bullets:null;
   if(bulls&&bulls.length>0){
     ctx.globalAlpha=0.3;
     ctx.lineWidth=1;
@@ -377,7 +385,8 @@ function updateUI(){
   }
   kfEl.innerHTML=kparts.join('');
 
-  statsEl.textContent=state.players.length+' players | '+(state.bullets?state.bullets.length:0)+' bullets | '+curFPS+' fps';
+  var numBulls = (state.scene && state.scene.dynamic && state.scene.dynamic.bullets) ? state.scene.dynamic.bullets.length : 0;
+  statsEl.textContent=state.players.length+' players | '+numBulls+' bullets | '+curFPS+' fps';
 
   if(state.over&&!overlay.classList.contains('show')){
     overlay.querySelector('h1').textContent='WINNER: '+state.winner;
@@ -395,7 +404,8 @@ function drawMinimap(){
   if(w===0||h===0)return;
   mctx.fillStyle='#0a0a12';
   mctx.fillRect(0,0,w,h);
-  var sx=w/state.map_w,sy=h/state.map_h;
+  var mw=(state.scene)?state.scene.mapw:2000,mh=(state.scene)?state.scene.maph:2000;
+  var sx=w/mw,sy=h/mh;
   var pls=state.players;
   for(var i=0;i<pls.length;i++){
     var p=pls[i];
