@@ -40,7 +40,7 @@ const (
 
 	RoundSec = 60
 	WinKills = 30
-	WebPort  = ":8080"
+	WebPort  = ":8090"
 )
 
 type V2 struct{ X, Y float64 }
@@ -310,15 +310,15 @@ func main() {
 		"tick_duration_ms": 1000.0 / TPS,
 		"timeout_ms":       AxesTimeout.Seconds() * 1000,
 		"rules": map[string]interface{}{
-			"map_w":        MapW,
-			"map_h":        MapH,
-			"move_speed":   MoveSpeed,
-			"bullet_speed": BulletSpd,
-			"damage":       Dmg,
-			"win_kills":    WinKills,
+			"map_w":         MapW,
+			"map_h":         MapH,
+			"move_speed":    MoveSpeed,
+			"bullet_speed":  BulletSpd,
+			"damage":        Dmg,
+			"win_kills":     WinKills,
 			"respawn_ticks": RespawnT,
-			"shoot_cd":     ShootCD,
-			"dash_cd":      DashCD,
+			"shoot_cd":      ShootCD,
+			"dash_cd":       DashCD,
 		},
 	}
 	setupData, _ := json.Marshal(setup)

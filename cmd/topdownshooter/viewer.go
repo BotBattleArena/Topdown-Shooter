@@ -179,16 +179,11 @@ function render(now){
 
   cam.zoom+=(targetZoom-cam.zoom)*0.08;
 
-  if(autoFollow&&state.players.length>0){
-    var cx=0,cy=0,n=0;
-    for(var i=0;i<state.players.length;i++){
-      var p=state.players[i];
-      if(p.alive){cx+=p.x;cy+=p.y;n++}
-    }
-    if(n>0){
-      cam.x+=(cx/n-cam.x)*0.05;
-      cam.y+=(cy/n-cam.y)*0.05;
-    }
+  if(autoFollow){
+    var tx = state.map_w * 0.5;
+    var ty = state.map_h * 0.5;
+    cam.x += (tx - cam.x) * 0.05;
+    cam.y += (ty - cam.y) * 0.05;
   }
 
   ctx.fillStyle='#0d0d14';
