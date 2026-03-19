@@ -31,7 +31,7 @@ const (
 	DashLen    = 8
 	DashCD     = 180
 	BulletSpd  = 10.0
-	BulletLife = 90
+	BulletLife = 600
 	ShootCD    = 25
 	Dmg        = 34
 	MaxHP      = 100
@@ -156,7 +156,6 @@ type Player struct {
 
 // PlayerView is the bot-facing player data (no alive, no color).
 type PlayerView struct {
-	ID      string  `json:"id"`
 	X       float64 `json:"x"`
 	Y       float64 `json:"y"`
 	AimX    float64 `json:"aim_x"`
@@ -170,7 +169,7 @@ type PlayerView struct {
 
 func playerToView(p *Player) PlayerView {
 	return PlayerView{
-		ID: p.ID, X: p.X, Y: p.Y,
+		X: p.X, Y: p.Y,
 		AimX: p.AimX, AimY: p.AimY,
 		HP: p.HP, Kills: p.Kills, Deaths: p.Deaths,
 		ShootCD: p.ShootCD, DashCD: p.DashCD,
@@ -191,10 +190,10 @@ type Bullet struct {
 // --------------- Bot Frame (state.tick) ---------------
 
 type BotFrame struct {
-	Type    string       `json:"type"`
-	Tick    int          `json:"tick"`
-	Players []PlayerView `json:"players"`
-	Scene   SceneTick    `json:"scene"`
+	Type    string                `json:"type"`
+	Tick    int                   `json:"tick"`
+	Players map[string]PlayerView `json:"players"`
+	Scene   SceneTick             `json:"scene"`
 }
 
 // --------------- Kill Event ---------------
@@ -208,13 +207,13 @@ type KillEv struct {
 // --------------- Viewer Frame (for web viewer, unchanged) ---------------
 
 type ViewFrame struct {
-	Players []*Player `json:"players"`
-	Tick    int       `json:"tick"`
-	MaxTick int       `json:"max_tick"`
-	Kills   []KillEv  `json:"kills"`
-	Over    bool      `json:"over"`
-	Winner  string    `json:"winner,omitempty"`
-	Scene   ViewScene `json:"scene"`
+	Players map[string]*Player `json:"players"`
+	Tick    int                `json:"tick"`
+	MaxTick int                `json:"max_tick"`
+	Kills   []KillEv           `json:"kills"`
+	Over    bool               `json:"over"`
+	Winner  string             `json:"winner,omitempty"`
+	Scene   ViewScene          `json:"scene"`
 }
 
 // --------------- Palette ---------------
@@ -1083,9 +1082,9 @@ func main() {
 		}
 
 		// Build bot-facing player list (no alive, no color)
-		pvs := make([]PlayerView, 0, len(players))
+		pvs := make(map[string]PlayerView, len(players))
 		for _, p := range players {
-			pvs = append(pvs, playerToView(p))
+			pvs[p.ID] = playerToView(p)
 		}
 
 		bf := BotFrame{
@@ -1249,11 +1248,6 @@ func main() {
 
 		// Emit viewer frame (every 3 ticks)
 		if tick%3 == 0 {
-			pList := make([]*Player, 0, len(players))
-			for _, p := range players {
-				pList = append(pList, p)
-			}
-
 			// Rebuild dynamic map but with bullets containing owners for the viewer
 			baseDyn := buildDynamicMap(tick)
 			viewDyn := ViewerDynamicScene{
@@ -1268,7 +1262,7 @@ func main() {
 			}
 
 			vf := ViewFrame{
-				Players: pList,
+				Players: players,
 				Tick:    tick, MaxTick: maxTick,
 				Kills: kills, Over: gameOver, Winner: winner,
 				Scene: ViewScene{MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDyn},
@@ -1279,10 +1273,6 @@ func main() {
 	}
 
 	// Final viewer frame
-	pList := make([]*Player, 0, len(players))
-	for _, p := range players {
-		pList = append(pList, p)
-	}
 	baseDynFinal := buildDynamicMap(tick)
 	viewDynFinal := ViewerDynamicScene{
 		Rect:   baseDynFinal.Rect,
@@ -1295,7 +1285,7 @@ func main() {
 		})
 	}
 	final := ViewFrame{
-		Players: pList,
+		Players: players,
 		Tick:    tick, MaxTick: maxTick,
 		Kills: kills, Over: true, Winner: winner,
 		Scene: ViewScene{MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDynFinal},

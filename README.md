@@ -14,8 +14,11 @@ topdownshooter [flags]
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--input-dir` | `string` | `./bots/inputs` | Path to the directory containing bot executables. |
-| `--help` | | | Show all available flags and exit. |
+| `-input-dir` | `string` | `./bots/inputs` | Path to the directory containing bot executables. |
+| `-w` | `float64` | `2000` | Map width. |
+| `-h` | `float64` | `2000` | Map height. |
+| `-complex` | `float64` | `0` |Set credits for complex map generation|
+| `-help` | | | Show all available flags and exit. |
 
 ### Examples
 
@@ -24,10 +27,10 @@ topdownshooter [flags]
 topdownshooter
 
 # Run with a custom bots directory
-topdownshooter --input-dir ./my-bots
+topdownshooter -input-dir ./my-bots
 
 # Show help
-topdownshooter --help
+topdownshooter -help
 ```
 
 ## Communication Flow
@@ -168,9 +171,8 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
   "state": {
     "type": "tick",
     "tick": 1234,
-    "players": [
-      {
-        "id": "bot_id_1",
+    "players": {
+      "bot_id_1": {
         "x": 100.5,
         "y": 200.0,
         "aim_x": 0.707,
@@ -181,7 +183,7 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
         "shoot_cd": 10,
         "dash_cd": 120
       }
-    ],
+    },
     "scene": {
       "dynamic": {
         "rect": [
@@ -203,14 +205,13 @@ Sent **every tick** (60 times per second) during the game loop. The bot **must r
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `tick` | `Int` | Current game tick number. |
-| `players` | `Array<Player>` | All players in the game. |
+| `players` | `Map<String, Player>` | Dictionary of all players, keyed by their ID. |
 | `scene.dynamic` | `Object` | Dynamic geometry grouped by type (`rect`, `bullets`, etc.). |
 
 #### Player Object
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `id` | `String` | Unique player identifier. |
 | `x`, `y` | `Float` | Current position. |
 | `aim_x`, `aim_y` | `Float` | Current normalized aiming direction. |
 | `hp` | `Int` | Health points (0–100). 0 = dead. |
@@ -277,6 +278,7 @@ Sent when the game is over. The bot should exit gracefully. No response expected
 - **Movement Speed**: 3.5 units/tick.
 - **Dash Speed**: 14.0 units/tick for 8 ticks.
 - **Bullet Speed**: 10.0 units/tick.
+- **Bullet Lifetime**: 600 ticks (10 seconds).
 - **Damage**: 34 per hit (3 hits to kill).
 - **Respawn Time**: 120 ticks (2 seconds).
 - **Shooting Cooldown**: 25 ticks.

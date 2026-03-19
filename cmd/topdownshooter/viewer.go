@@ -129,6 +129,7 @@ var es=new EventSource('/events');
 es.onmessage=function(e){
   prevState=state;
   state=JSON.parse(e.data);
+  state.players = Object.values(state.players || {});
   stateTime=performance.now();
   interpT=0;
   uiDirty=true;
