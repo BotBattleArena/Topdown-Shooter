@@ -16,10 +16,12 @@ import (
 	"github.com/BotBattleArena/ArenaFramework/pkg/arena"
 )
 
-const (
+var (
 	MapW float64 = 2000
 	MapH float64 = 2000
+)
 
+const (
 	TPS         = 60
 	TickDur     = time.Second / TPS
 	AxesTimeout = 12 * time.Millisecond
@@ -202,13 +204,13 @@ type KillEv struct {
 // --------------- Viewer Frame (for web viewer, unchanged) ---------------
 
 type ViewFrame struct {
-	Players []*Player  `json:"players"`
-	Tick    int        `json:"tick"`
-	MaxTick int        `json:"max_tick"`
-	Kills   []KillEv   `json:"kills"`
-	Over    bool       `json:"over"`
-	Winner  string     `json:"winner,omitempty"`
-	Scene   ViewScene  `json:"scene"`
+	Players []*Player `json:"players"`
+	Tick    int       `json:"tick"`
+	MaxTick int       `json:"max_tick"`
+	Kills   []KillEv  `json:"kills"`
+	Over    bool      `json:"over"`
+	Winner  string    `json:"winner,omitempty"`
+	Scene   ViewScene `json:"scene"`
 }
 
 // --------------- Palette ---------------
@@ -428,44 +430,542 @@ func resolveCollisions(pos V2, r float64, static StaticScene, dyn DynamicScene) 
 	return pos
 }
 
-// --------------- Static Map Definition ---------------
+// --------------- Generated Map Definition ---------------
 
-func buildStaticMap() StaticScene {
-	return StaticScene{
-		Rect: []MapObject{
-			{X: 0, Y: 0, W: MapW, H: 50},
-			{X: 0, Y: 0, W: 50, H: MapH},
-			{X: MapW - 50, Y: 0, W: 50, H: MapH},
-			{X: 0, Y: MapH - 50, W: MapW, H: 50},
-			{X: 900, Y: 900, W: 200, H: 200},
-		},
-		Circle: []MapObject{
-			{X: 500, Y: 500, R: 80},
-			{X: 1500, Y: 1500, R: 80},
-		},
-		Poly: []MapObject{
-			{Points: [][2]float64{{300, 1400}, {400, 1300}, {500, 1400}}},
-			{Points: [][2]float64{{1500, 600}, {1600, 500}, {1700, 600}}},
-		},
+type GenDoor struct {
+	X, Y, W, H float64
+	Phase      int
+	Vertical   bool
+}
+
+var globalDoors []GenDoor
+
+func generateMap(w, h, credits float64) StaticScene {
+	globalDoors = nil
+	static := StaticScene{}
+
+	// Outer walls (50px thick border)
+	wallT := 50.0
+	static.Rect = append(static.Rect, MapObject{X: 0, Y: 0, W: w, H: wallT})         // top
+	static.Rect = append(static.Rect, MapObject{X: 0, Y: 0, W: wallT, H: h})         // left
+	static.Rect = append(static.Rect, MapObject{X: w - wallT, Y: 0, W: wallT, H: h}) // right
+	static.Rect = append(static.Rect, MapObject{X: 0, Y: h - wallT, W: w, H: wallT}) // bottom
+
+	// Grid: cell size relative to map (smaller side / 15), clamped to [120, 350]
+	minSide := w
+	if h < minSide {
+		minSide = h
 	}
+	cellSize := clamp(minSide/15, 120, 350)
+	margin := 150.0
+	playW := w - 2*margin
+	playH := h - 2*margin
+	cols := int(playW / cellSize)
+	rows := int(playH / cellSize)
+	if cols < 3 {
+		cols = 3
+	}
+	if rows < 3 {
+		rows = 3
+	}
+
+	// Limit the number of structures based on grid density instead of just credits
+	maxObjects := (cols * rows) / 5
+	placedCount := 0
+
+	usedGrid := make([][]bool, cols)
+	for i := range usedGrid {
+		usedGrid[i] = make([]bool, rows)
+	}
+
+	// gridOrigin: top-left corner of grid cell gx,gy with random jitter
+	gridOrigin := func(gx, gy int) (float64, float64) {
+		jitter := cellSize * 0.15
+		ox := margin + float64(gx)*cellSize + (rand.Float64()*2-1)*jitter
+		oy := margin + float64(gy)*cellSize + (rand.Float64()*2-1)*jitter
+		return ox, oy
+	}
+	// gridCenter: center of grid cell gx,gy with random jitter
+	gridCenter := func(gx, gy int) (float64, float64) {
+		ox, oy := gridOrigin(gx, gy)
+		return ox + cellSize/2, oy + cellSize/2
+	}
+
+	// --- Helper: horizontal wall with centered doorway ---
+	addHWall := func(x, y, length, thick, doorW float64, addDoor bool) {
+		minStub := thick // each side must be at least this wide
+		if doorW > length-2*minStub {
+			doorW = length - 2*minStub
+		}
+		if doorW < minStub { // wall too short for any door → solid
+			static.Rect = append(static.Rect, MapObject{X: x, Y: y, W: length, H: thick})
+			return
+		}
+		half := (length - doorW) / 2
+		static.Rect = append(static.Rect, MapObject{X: x, Y: y, W: half, H: thick})
+		static.Rect = append(static.Rect, MapObject{X: x + half + doorW, Y: y, W: half, H: thick})
+		if addDoor {
+			globalDoors = append(globalDoors, GenDoor{
+				X: x + half, Y: y, W: doorW, H: thick,
+				Phase: rand.Intn(300), Vertical: false,
+			})
+		}
+	}
+
+	// --- Helper: vertical wall with centered doorway ---
+	addVWall := func(x, y, length, thick, doorH float64, addDoor bool) {
+		minStub := thick
+		if doorH > length-2*minStub {
+			doorH = length - 2*minStub
+		}
+		if doorH < minStub { // wall too short for any door → solid
+			static.Rect = append(static.Rect, MapObject{X: x, Y: y, W: thick, H: length})
+			return
+		}
+		half := (length - doorH) / 2
+		static.Rect = append(static.Rect, MapObject{X: x, Y: y, W: thick, H: half})
+		static.Rect = append(static.Rect, MapObject{X: x, Y: y + half + doorH, W: thick, H: half})
+		if addDoor {
+			globalDoors = append(globalDoors, GenDoor{
+				X: x, Y: y + half, W: thick, H: doorH,
+				Phase: rand.Intn(300), Vertical: true,
+			})
+		}
+	}
+
+	// --- Helper: solid horizontal wall ---
+	addHSolid := func(x, y, length, thick float64) {
+		static.Rect = append(static.Rect, MapObject{X: x, Y: y, W: length, H: thick})
+	}
+
+	// --- Helper: solid vertical wall ---
+	addVSolid := func(x, y, length, thick float64) {
+		static.Rect = append(static.Rect, MapObject{X: x, Y: y, W: thick, H: length})
+	}
+
+	// Mark grid block as used + a 1-cell buffer around it to ensure distance
+	markUsed := func(gx, gy, bw, bh int) {
+		for dx := -1; dx <= bw; dx++ {
+			for dy := -1; dy <= bh; dy++ {
+				nx, ny := gx+dx, gy+dy
+				if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
+					usedGrid[nx][ny] = true
+				}
+			}
+		}
+	}
+
+	budget := credits
+	thick := 25.0
+	doorW := 200.0 // for interior dynamic doors
+
+	// addBox: creates a rectangular room at (bx,by) size (bw,bh).
+	// Walls overlap at corners (each extends full dimension).
+	// openSide: 0=top open, 1=bottom open, 2=left open, 3=right open, -1=all closed.
+	addBox := func(bx, by, bw, bh, wallThick float64, openSide int) {
+		if openSide != 0 { // top
+			addHSolid(bx, by, bw, wallThick)
+		}
+		if openSide != 1 { // bottom
+			addHSolid(bx, by+bh-wallThick, bw, wallThick)
+		}
+		if openSide != 2 { // left
+			addVSolid(bx, by, bh, wallThick)
+		}
+		if openSide != 3 { // right
+			addVSolid(bx+bw-wallThick, by, bh, wallThick)
+		}
+	}
+
+	// ═══════════ Tier 0: Large complex (3×3 grid, cost 100) ═══════════
+	for credits > budget*0.6+150 && placedCount < maxObjects {
+		gx, gy, ok := getFreeGridBlock(cols, rows, 3, 3, usedGrid)
+		if !ok {
+			break
+		}
+		ox, oy := gridOrigin(gx, gy)
+		cw := cellSize * 2.7 // slightly smaller than 3*3 to allow jitter
+		ch := cellSize * 2.7
+
+		variant := rand.Intn(3)
+		switch variant {
+		case 0: // Cross-divided 4-room complex, 1 open entrance side
+			openSide := rand.Intn(4)
+			addBox(ox, oy, cw, ch, thick, openSide)
+			// Interior cross walls with dynamic doors
+			midX := ox + cw/2 - thick/2
+			midY := oy + ch/2 - thick/2
+			innerH := ch - 2*thick
+			innerW := cw - 2*thick
+			addVWall(midX, oy+thick, innerH/2, thick, doorW, true)
+			addVWall(midX, oy+thick+innerH/2, innerH/2, thick, doorW, true)
+			addHWall(ox+thick, midY, innerW/2-thick/2, thick, doorW, true)
+			addHWall(midX+thick, midY, innerW/2-thick/2, thick, doorW, true)
+
+		case 1: // L-shaped compound: two rooms joined at corner
+			roomA_W := cw * 0.6
+			roomA_H := ch * 0.55
+			roomB_W := cw * 0.55
+			roomB_H := ch * 0.6
+			// Room A (top-left area)
+			addHWall(ox, oy, roomA_W, thick, doorW, false)               // top
+			addVSolid(ox, oy, roomA_H, thick)                            // left
+			addHSolid(ox, oy+roomA_H-thick, roomA_W, thick)              // bottom of A
+			addVWall(ox+roomA_W-thick, oy, roomA_H, thick, doorW, false) // right of A (entrance to corridor)
+			// Room B (bottom-right area)
+			addVWall(ox+cw-roomB_W, oy+ch-roomB_H, roomB_H, thick, doorW, false) // left of B (entrance)
+			addHSolid(ox+cw-roomB_W, oy+ch-roomB_H, roomB_W, thick)              // top of B
+			addVSolid(ox+cw-thick, oy+ch-roomB_H, roomB_H, thick)                // right
+			addHWall(ox+cw-roomB_W, oy+ch-thick, roomB_W, thick, doorW, false)   // bottom
+			// Connecting corridor walls between A and B
+			corrY := oy + roomA_H - thick
+			corrH := ch - roomA_H - roomB_H + 2*thick
+			if corrH > thick*2 {
+				addHSolid(ox+roomA_W-thick, corrY, cw-roomA_W-roomB_W+2*thick, thick)
+			}
+
+		case 2: // Corridor layout: two rooms with corridor between
+			roomH := ch*0.35 + rand.Float64()*ch*0.1
+			corrH := ch - 2*roomH
+			corrW := cw * 0.35
+			corrOx := ox + (cw-corrW)/2
+			// Top room
+			addHWall(ox, oy, cw, thick, doorW, false)       // top entrance
+			addVSolid(ox, oy, roomH, thick)                 // left
+			addVSolid(ox+cw-thick, oy, roomH, thick)        // right
+			addHSolid(ox, oy+roomH-thick, corrOx-ox, thick) // bottom-left partition
+			addHSolid(corrOx+corrW, oy+roomH-thick, ox+cw-corrOx-corrW, thick)
+			// Corridor
+			addVSolid(corrOx, oy+roomH-thick, corrH+thick, thick)             // left wall
+			addVSolid(corrOx+corrW-thick, oy+roomH-thick, corrH+thick, thick) // right wall
+			// Bottom room
+			addHSolid(ox, oy+ch-roomH, corrOx-ox, thick) // top-left partition
+			addHSolid(corrOx+corrW, oy+ch-roomH, ox+cw-corrOx-corrW, thick)
+			addVSolid(ox, oy+ch-roomH, roomH, thick)           // left
+			addVSolid(ox+cw-thick, oy+ch-roomH, roomH, thick)  // right
+			addHWall(ox, oy+ch-thick, cw, thick, doorW, false) // bottom entrance
+			// Dynamic doors in corridor
+			globalDoors = append(globalDoors, GenDoor{
+				X: corrOx, Y: oy + roomH - thick + corrH/2, W: corrW, H: thick,
+				Phase: rand.Intn(300), Vertical: false,
+			})
+		}
+
+		placedCount++
+		markUsed(gx, gy, 3, 3)
+		credits -= 75
+	}
+
+	// ═══════════ Tier 1: Medium building (2×2 grid, cost 50) ═══════════
+	for credits > budget*0.5+100 && placedCount < maxObjects {
+		gx, gy, ok := getFreeGridBlock(cols, rows, 2, 2, usedGrid)
+		if !ok {
+			break
+		}
+		ox, oy := gridOrigin(gx, gy)
+		bw := cellSize * 1.7 // slightly smaller than 2*2 to allow jitter
+		bh := cellSize * 1.7
+
+		variant := rand.Intn(3)
+		switch variant {
+		case 0: // Rectangular with interior wall, 1 open entrance side
+			openSide := rand.Intn(4)
+			addBox(ox, oy, bw, bh, thick, openSide)
+			// Interior wall with dynamic door
+			if rand.Float64() < 0.7 {
+				if rand.Intn(2) == 0 {
+					midX := ox + bw/2 - thick/2
+					addVWall(midX, oy+thick, bh-2*thick, thick, doorW, true)
+				} else {
+					midY := oy + bh/2 - thick/2
+					addHWall(ox+thick, midY, bw-2*thick, thick, doorW, true)
+				}
+			}
+
+		case 1: // L-shaped building: two open wings joined at corner
+			wingW := bw * (0.45 + rand.Float64()*0.15)
+			wingH := bh * (0.45 + rand.Float64()*0.15)
+			// Top wing (horizontal, spans full width, height = wingH)
+			addHWall(ox, oy, bw, thick, doorW, false)   // top with entrance
+			addVSolid(ox, oy, wingH, thick)             // left
+			addHSolid(ox, oy+wingH-thick, wingW, thick) // bottom of top wing (partial, creates L corner)
+			addVSolid(ox+bw-thick, oy, wingH, thick)    // right of top wing
+			// Right wing (vertical, extends down from top wing)
+			addVSolid(ox+bw-thick, oy+wingH, bh-wingH, thick)                // right continues down
+			addHWall(ox+wingW, oy+bh-thick, bw-wingW, thick, doorW, false)   // bottom with entrance
+			addVSolid(ox+wingW-thick, oy+wingH-thick, bh-wingH+thick, thick) // inner left of lower wing
+
+		case 2: // U-shaped open courtyard with optional closing gate
+			openSide := rand.Intn(4)
+			switch openSide {
+			case 0: // open top
+				addHWall(ox, oy+bh-thick, bw, thick, doorW, false) // bottom entrance
+				addVSolid(ox, oy, bh, thick)
+				addVSolid(ox+bw-thick, oy, bh, thick)
+				// partial top walls (arms of U)
+				addHSolid(ox, oy, bw*0.3, thick)
+				addHSolid(ox+bw*0.7, oy, bw*0.3, thick)
+			case 1: // open bottom
+				addHWall(ox, oy, bw, thick, doorW, false) // top entrance
+				addVSolid(ox, oy, bh, thick)
+				addVSolid(ox+bw-thick, oy, bh, thick)
+				addHSolid(ox, oy+bh-thick, bw*0.3, thick)
+				addHSolid(ox+bw*0.7, oy+bh-thick, bw*0.3, thick)
+			case 2: // open left
+				addHSolid(ox, oy, bw, thick)
+				addHSolid(ox, oy+bh-thick, bw, thick)
+				addVWall(ox+bw-thick, oy, bh, thick, doorW, false) // right entrance
+				addVSolid(ox, oy, bh*0.3, thick)
+				addVSolid(ox, oy+bh*0.7, bh*0.3, thick)
+			case 3: // open right
+				addHSolid(ox, oy, bw, thick)
+				addHSolid(ox, oy+bh-thick, bw, thick)
+				addVWall(ox, oy, bh, thick, doorW, false) // left entrance
+				addVSolid(ox+bw-thick, oy, bh*0.3, thick)
+				addVSolid(ox+bw-thick, oy+bh*0.7, bh*0.3, thick)
+			}
+			// Add a circle pillar in the courtyard center
+			static.Circle = append(static.Circle, MapObject{
+				X: ox + bw/2, Y: oy + bh/2, R: 20 + rand.Float64()*25,
+			})
+		}
+
+		placedCount++
+		markUsed(gx, gy, 2, 2)
+		credits -= 50
+	}
+
+	// ═══════════ Tier 2: Small structures (1×1 grid, cost 20) ═══════════
+	// Various asymmetric shapes: L, U, T, and rectangular buildings
+	for credits > budget*0.25+50 && placedCount < maxObjects {
+		gx, gy, ok := getFreeGridCell(cols, rows, usedGrid)
+		if !ok {
+			break
+		}
+		ox, oy := gridOrigin(gx, gy)
+		sThick := 20.0
+		// Space within 1x1 cell, slightly reduced for jitter padding
+		space := cellSize * 0.8
+		ox += (cellSize - space) / 2
+		oy += (cellSize - space) / 2
+
+		variant := rand.Intn(4)
+		switch variant {
+		case 0: // L-wall (two walls at right angle, open structure)
+			armLen := space * (0.6 + rand.Float64()*0.2)
+			cx := ox + space/2
+			cy := oy + space/2
+			corner := rand.Intn(4)
+			switch corner {
+			case 0: // top-left corner
+				addHSolid(cx-armLen/2, cy-armLen/2, armLen, sThick)
+				addVSolid(cx-armLen/2, cy-armLen/2, armLen, sThick)
+			case 1: // top-right corner
+				addHSolid(cx-armLen/2, cy-armLen/2, armLen, sThick)
+				addVSolid(cx+armLen/2-sThick, cy-armLen/2, armLen, sThick)
+			case 2: // bottom-left corner
+				addHSolid(cx-armLen/2, cy+armLen/2-sThick, armLen, sThick)
+				addVSolid(cx-armLen/2, cy-armLen/2, armLen, sThick)
+			case 3: // bottom-right corner
+				addHSolid(cx-armLen/2, cy+armLen/2-sThick, armLen, sThick)
+				addVSolid(cx+armLen/2-sThick, cy-armLen/2, armLen, sThick)
+			}
+
+		case 1: // U-shape (3 walls, open on one side)
+			bw := space * (0.7 + rand.Float64()*0.2)
+			bh := space * (0.7 + rand.Float64()*0.2)
+			cx := ox + (space-bw)/2
+			cy := oy + (space-bh)/2
+			switch rand.Intn(4) {
+			case 0: // open top
+				addHSolid(cx, cy+bh-sThick, bw, sThick)
+				addVSolid(cx, cy, bh, sThick)
+				addVSolid(cx+bw-sThick, cy, bh, sThick)
+			case 1: // open bottom
+				addHSolid(cx, cy, bw, sThick)
+				addVSolid(cx, cy, bh, sThick)
+				addVSolid(cx+bw-sThick, cy, bh, sThick)
+			case 2: // open left
+				addHSolid(cx, cy, bw, sThick)
+				addHSolid(cx, cy+bh-sThick, bw, sThick)
+				addVSolid(cx+bw-sThick, cy, bh, sThick)
+			case 3: // open right
+				addHSolid(cx, cy, bw, sThick)
+				addHSolid(cx, cy+bh-sThick, bw, sThick)
+				addVSolid(cx, cy, bh, sThick)
+			}
+
+		case 2: // Cross / plus shape (two crossing walls, open from all 4 quadrants)
+			armLen := space * (0.7 + rand.Float64()*0.2)
+			cx := ox + space/2
+			cy := oy + space/2
+			addHSolid(cx-armLen/2, cy-sThick/2, armLen, sThick)
+			addVSolid(cx-sThick/2, cy-armLen/2, armLen, sThick)
+
+		case 3: // Rectangular building with wide entrance
+			bw := space * (0.6 + rand.Float64()*0.3)
+			bh := space * (0.6 + rand.Float64()*0.3)
+			cx := ox + (space-bw)/2
+			cy := oy + (space-bh)/2
+			sDoor := 120.0
+			if sDoor > bw*0.6 {
+				sDoor = bw * 0.6
+			}
+			if sDoor > bh*0.6 {
+				sDoor = bh * 0.6
+			}
+			doorSide := rand.Intn(4)
+			if doorSide == 0 {
+				addHWall(cx, cy, bw, sThick, sDoor, false)
+			} else {
+				addHSolid(cx, cy, bw, sThick)
+			}
+			if doorSide == 1 {
+				addHWall(cx, cy+bh-sThick, bw, sThick, sDoor, false)
+			} else {
+				addHSolid(cx, cy+bh-sThick, bw, sThick)
+			}
+			if doorSide == 2 {
+				addVWall(cx, cy, bh, sThick, sDoor, false)
+			} else {
+				addVSolid(cx, cy, bh, sThick)
+			}
+			if doorSide == 3 {
+				addVWall(cx+bw-sThick, cy, bh, sThick, sDoor, false)
+			} else {
+				addVSolid(cx+bw-sThick, cy, bh, sThick)
+			}
+		}
+
+		placedCount++
+		markUsed(gx, gy, 1, 1)
+		credits -= 20
+	}
+
+	// ═══════════ Tier 3: Walls / barriers (1×1, cost 12) ═══════════
+	for credits > budget*0.1+10 && placedCount < maxObjects {
+		gx, gy, ok := getFreeGridCell(cols, rows, usedGrid)
+		if !ok {
+			break
+		}
+		wx, wy := gridCenter(gx, gy)
+
+		switch rand.Intn(3) {
+		case 0: // L-shaped wall
+			arm := 60 + rand.Float64()*80
+			addHSolid(wx-arm/2, wy, arm, 20)
+			addVSolid(wx-arm/2, wy, arm, 20)
+		case 1: // Straight wall
+			wl := 80 + rand.Float64()*100
+			if rand.Intn(2) == 0 {
+				addHSolid(wx-wl/2, wy-10, wl, 20)
+			} else {
+				addVSolid(wx-10, wy-wl/2, wl, 20)
+			}
+		case 2: // Circle pillar
+			r := 25 + rand.Float64()*40
+			static.Circle = append(static.Circle, MapObject{X: wx, Y: wy, R: r})
+		}
+
+		placedCount++
+		markUsed(gx, gy, 1, 1)
+		credits -= 12
+	}
+
+	// ═══════════ Tier 4: Simple shapes (1×1, cost 5) ═══════════
+	for credits >= 2 && placedCount < maxObjects {
+		gx, gy, ok := getFreeGridCell(cols, rows, usedGrid)
+		if !ok {
+			break
+		}
+		wx, wy := gridCenter(gx, gy)
+
+		switch rand.Intn(3) {
+		case 0: // Circle
+			r := 50 + rand.Float64()*50
+			static.Circle = append(static.Circle, MapObject{X: wx, Y: wy, R: r})
+		case 1: // Triangle
+			s := 70 + rand.Float64()*40
+			static.Poly = append(static.Poly, MapObject{Points: [][2]float64{
+				{wx, wy - s/2},
+				{wx + s/2, wy + s/2},
+				{wx - s/2, wy + s/2},
+			}})
+		case 2: // Crate
+			sz := 60 + rand.Float64()*30
+			static.Rect = append(static.Rect, MapObject{X: wx - sz/2, Y: wy - sz/2, W: sz, H: sz})
+		}
+
+		placedCount++
+		markUsed(gx, gy, 1, 1)
+		credits -= 5
+	}
+
+	return static
+}
+
+// getFreeGridBlock finds a free contiguous block of bw×bh cells.
+func getFreeGridBlock(cols, rows, bw, bh int, usedGrid [][]bool) (int, int, bool) {
+	type pos struct{ x, y int }
+	var candidates []pos
+	for gx := 0; gx <= cols-bw; gx++ {
+		for gy := 0; gy <= rows-bh; gy++ {
+			free := true
+			for dx := 0; dx < bw && free; dx++ {
+				for dy := 0; dy < bh && free; dy++ {
+					if usedGrid[gx+dx][gy+dy] {
+						free = false
+					}
+				}
+			}
+			if free {
+				candidates = append(candidates, pos{gx, gy})
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return 0, 0, false
+	}
+	pick := candidates[rand.Intn(len(candidates))]
+	return pick.x, pick.y, true
+}
+
+func getFreeGridCell(cols, rows int, usedGrid [][]bool) (int, int, bool) {
+	return getFreeGridBlock(cols, rows, 1, 1, usedGrid)
 }
 
 // buildDynamicMap returns dynamic map objects that change each tick.
 func buildDynamicMap(tick int) DynamicScene {
-	// A rect that oscillates horizontally
-	baseX := 650.0
-	offsetX := math.Sin(float64(tick)/60.0) * 200.0
-	return DynamicScene{
-		Rect: []MapObject{
-			{X: baseX + offsetX, Y: 1000, W: 120, H: 40},
-		},
+	dyn := DynamicScene{}
+	// Process doors
+	for _, d := range globalDoors {
+		// Open and close cycle: 150 ticks closed, 150 ticks open
+		cycle := (tick + d.Phase) % 300
+		if cycle < 150 {
+			// Closed - door is present as obstacle
+			dyn.Rect = append(dyn.Rect, MapObject{X: d.X, Y: d.Y, W: d.W, H: d.H})
+		}
 	}
+	return dyn
 }
 
 // --------------- Main ---------------
 
 func main() {
 	maxTick := RoundSec * TPS
+
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: topdownshooter [flags]\n\nFlags:\n")
+		flag.PrintDefaults()
+	}
+	flagMapW := flag.Float64("w", 2000, "(float64) map width")
+	flagMapH := flag.Float64("h", 2000, "(float64) map height")
+	flagComplex := flag.Float64("complex", 0, "(float64) generate complex map (rooms, corridors, doors)")
+	inputDir := flag.String("input-dir", "./bots/inputs", "(string) path to bots input directory")
+	flag.Parse()
+
+	MapW = *flagMapW
+	MapH = *flagMapH
 
 	fmt.Println("=== Top-Down Shooter ===")
 	fmt.Printf("Map: %.0fx%.0f | %ds round | %d kills to win\n", MapW, MapH, RoundSec, WinKills)
@@ -479,13 +979,6 @@ func main() {
 		http.HandleFunc("/events", eventsEndpoint)
 		log.Fatal(http.ListenAndServe(WebPort, nil))
 	}()
-
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: topdownshooter [flags]\n\nFlags:\n")
-		flag.PrintDefaults()
-	}
-	inputDir := flag.String("input-dir", "./bots/inputs", "(string) path to bots input directory")
-	flag.Parse()
 
 	a, err := arena.New(arena.Config{
 		InputDir:      *inputDir,
@@ -533,7 +1026,7 @@ func main() {
 	tick := 0
 
 	// ========== Phase 0: Setup ==========
-	staticMap := buildStaticMap()
+	staticMap := generateMap(MapW, MapH, *flagComplex)
 
 	setup := map[string]interface{}{
 		"type":             "setup",
@@ -746,7 +1239,7 @@ func main() {
 			for _, p := range players {
 				pList = append(pList, p)
 			}
-			
+
 			// Rebuild dynamic map but with bullets containing owners for the viewer
 			baseDyn := buildDynamicMap(tick)
 			viewDyn := ViewerDynamicScene{
@@ -759,12 +1252,12 @@ func main() {
 					X: b.X, Y: b.Y, R: BRadius, DX: b.DX, DY: b.DY, Owner: b.Owner,
 				})
 			}
-			
+
 			vf := ViewFrame{
 				Players: pList,
-				Tick: tick, MaxTick: maxTick,
+				Tick:    tick, MaxTick: maxTick,
 				Kills: kills, Over: gameOver, Winner: winner,
-				Scene: ViewScene{ MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDyn },
+				Scene: ViewScene{MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDyn},
 			}
 			data, _ := json.Marshal(vf)
 			emit(data)
@@ -789,9 +1282,9 @@ func main() {
 	}
 	final := ViewFrame{
 		Players: pList,
-		Tick: tick, MaxTick: maxTick,
+		Tick:    tick, MaxTick: maxTick,
 		Kills: kills, Over: true, Winner: winner,
-		Scene: ViewScene{ MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDynFinal },
+		Scene: ViewScene{MapW: MapW, MapH: MapH, Static: staticMap, Dynamic: viewDynFinal},
 	}
 	fd, _ := json.Marshal(final)
 	emit(fd)
