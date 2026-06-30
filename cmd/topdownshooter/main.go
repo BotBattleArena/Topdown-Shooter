@@ -1306,6 +1306,7 @@ func main() {
 	type lbEntry struct {
 		id       string
 		k        int
+		d        int
 		avgPing  time.Duration
 		timeouts int
 	}
@@ -1315,12 +1316,12 @@ func main() {
 		if p.PingCount > 0 {
 			avg = p.PingTotal / time.Duration(p.PingCount)
 		}
-		lb = append(lb, lbEntry{p.ID, p.Kills, avg, p.Timeouts})
+		lb = append(lb, lbEntry{p.ID, p.Kills, p.Deaths, avg, p.Timeouts})
 	}
 	sort.Slice(lb, func(i, j int) bool { return lb[i].k > lb[j].k })
 	for i, e := range lb {
-		fmt.Printf("  #%d %s — %d kills | avg ping: %dµs | timeouts: %d\n",
-			i+1, e.id, e.k, e.avgPing.Microseconds(), e.timeouts)
+		fmt.Printf("  #%d %s — %d kills / %d deaths | avg ping: %dµs | timeouts: %d\n",
+			i+1, e.id, e.k, e.d, e.avgPing.Microseconds(), e.timeouts)
 	}
 	time.Sleep(5 * time.Second)
 }

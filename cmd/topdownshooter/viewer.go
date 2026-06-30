@@ -26,6 +26,7 @@ canvas{display:block;width:100%;height:100%}
 .lb-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .lb-name{flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lb-kills{font-size:12px;font-weight:700;color:#8a8aff}
+.lb-deaths{font-size:12px;font-weight:700;color:#ff6b8a}
 .kill-row{font-size:10px;padding:2px 0;color:#777;display:flex;gap:4px;align-items:center}
 .kill-row .k{color:#ff6b8a}
 .kill-row .v{color:#8a8aff}
@@ -366,6 +367,8 @@ function updateUI(){
     parts.push(esc(p.id));
     parts.push('</span><span class="lb-kills">');
     parts.push(p.kills);
+    parts.push('</span><span class="lb-deaths">');
+    parts.push(p.deaths);
     parts.push('</span></div>');
   }
   lbEl.innerHTML=parts.join('');
