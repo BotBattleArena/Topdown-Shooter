@@ -1325,16 +1325,12 @@ func main() {
 	time.Sleep(5 * time.Second)
 }
 
-// getLocalIP returns the first non-loopback IPv4 address of the machine.
+// getLocalIP returns the preferred outbound IPv4 address of the machine.
 func getLocalIP() string {
-	addrs, err := net.InterfaceAddrs()
+	conn, err := net.Dial("udp4", "8.8.8.8:80")
 	if err != nil {
 		return ""
 	}
-	for _, addr := range addrs {
-		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
-			return ipNet.IP.String()
-		}
-	}
-	return ""
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }
