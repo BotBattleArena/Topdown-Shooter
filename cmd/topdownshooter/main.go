@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"sort"
 	"sync"
@@ -975,7 +976,11 @@ func main() {
 
 	fmt.Println("=== Top-Down Shooter ===")
 	fmt.Printf("Map: %.0fx%.0f | %ds round | %d kills to win\n", MapW, MapH, RoundSec, WinKills)
-	fmt.Printf("Viewer: http://localhost%s\n\n", WebPort)
+	fmt.Printf("Viewer: http://localhost%s\n", WebPort)
+	if lanIP := getLocalIP(); lanIP != "" {
+		fmt.Printf("Network: http://%s%s\n", lanIP, WebPort)
+	}
+	fmt.Println()
 
 	go func() {
 		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1318,4 +1323,18 @@ func main() {
 			i+1, e.id, e.k, e.avgPing.Microseconds(), e.timeouts)
 	}
 	time.Sleep(5 * time.Second)
+}
+
+// getLocalIP returns the first non-loopback IPv4 address of the machine.
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
+			return ipNet.IP.String()
+		}
+	}
+	return ""
 }
