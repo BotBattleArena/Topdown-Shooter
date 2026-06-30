@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	MapW float64 = 2000
-	MapH float64 = 2000
+	MapW     float64 = 2000
+	MapH     float64 = 2000
+	RoundSec int     = 60
 )
 
 const (
@@ -39,7 +40,6 @@ const (
 	BRadius    = 4.0
 	RespawnT   = 120
 
-	RoundSec     = 60
 	WinKills     = 30
 	CountdownSec = 3
 	WebPort      = ":8090"
@@ -955,8 +955,6 @@ func buildDynamicMap(tick int) DynamicScene {
 // --------------- Main ---------------
 
 func main() {
-	maxTick := RoundSec * TPS
-
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: topdownshooter [flags]\n\nFlags:\n")
 		flag.PrintDefaults()
@@ -964,11 +962,14 @@ func main() {
 	flagMapW := flag.Float64("w", 2000, "(float64) map width")
 	flagMapH := flag.Float64("h", 2000, "(float64) map height")
 	flagComplex := flag.Float64("complex", 0, "(float64) generate complex map (rooms, corridors, doors)")
+	flagRoundSec := flag.Int("round-time", 60, "(int) round time in seconds")
 	inputDir := flag.String("input-dir", "./bots/inputs", "(string) path to bots input directory")
 	flag.Parse()
 
 	MapW = *flagMapW
 	MapH = *flagMapH
+	RoundSec = *flagRoundSec
+	maxTick := RoundSec * TPS
 
 	fmt.Println("=== Top-Down Shooter ===")
 	fmt.Printf("Map: %.0fx%.0f | %ds round | %d kills to win\n", MapW, MapH, RoundSec, WinKills)
