@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -1319,8 +1320,10 @@ func main() {
 		lb = append(lb, lbEntry{p.ID, p.Kills, p.Deaths, avg, p.Timeouts})
 	}
 	sort.Slice(lb, func(i, j int) bool { return lb[i].k > lb[j].k })
+	fmt.Printf("  %-4s %-22s %6s %6s %12s %9s\n", "Rank", "Bot", "Kills", "Deaths", "Avg Ping", "Timeouts")
+	fmt.Println("  " + strings.Repeat("─", 65))
 	for i, e := range lb {
-		fmt.Printf("  #%d %s — %d kills / %d deaths | avg ping: %dµs | timeouts: %d\n",
+		fmt.Printf("  #%-3d %-22s %6d %6d %10dµs %9d\n",
 			i+1, e.id, e.k, e.d, e.avgPing.Microseconds(), e.timeouts)
 	}
 	time.Sleep(5 * time.Second)
