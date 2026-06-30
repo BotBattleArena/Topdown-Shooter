@@ -20,6 +20,7 @@ var (
 	MapW     float64 = 2000
 	MapH     float64 = 2000
 	RoundSec int     = 60
+	WinKills int     = 30
 )
 
 const (
@@ -40,7 +41,6 @@ const (
 	BRadius    = 4.0
 	RespawnT   = 120
 
-	WinKills     = 30
 	CountdownSec = 3
 	WebPort      = ":8090"
 )
@@ -963,12 +963,14 @@ func main() {
 	flagMapH := flag.Float64("h", 2000, "(float64) map height")
 	flagComplex := flag.Float64("complex", 0, "(float64) generate complex map (rooms, corridors, doors)")
 	flagRoundSec := flag.Int("round-time", 60, "(int) round time in seconds")
+	flagWinKills := flag.Int("win-kills", 30, "(int) kills needed to win")
 	inputDir := flag.String("input-dir", "./bots/inputs", "(string) path to bots input directory")
 	flag.Parse()
 
 	MapW = *flagMapW
 	MapH = *flagMapH
 	RoundSec = *flagRoundSec
+	WinKills = *flagWinKills
 	maxTick := RoundSec * TPS
 
 	fmt.Println("=== Top-Down Shooter ===")
